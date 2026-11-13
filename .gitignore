@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+data/raw/*.parquet
+data/clean/*.parquet
+.streamlit/
+.DS_Store
