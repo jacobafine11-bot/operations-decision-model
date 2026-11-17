@@ -1,0 +1,8 @@
+7a28f01  2026-11-17 17:11:22 +0000  Add commit log and bundle instructions
+380587b  2026-11-17 17:11:08 +0000  Holdout result (failed 1/6), real-data report with verdict, changelog C-006 to C-008, README status, sweep unit test
+4c8d4bd  2026-11-17 17:09:19 +0000  Phase 1 rerun under amendment 1 (Jan-Jun only): freeze V3 Erlang A + C3 effective agents
+b88300d  2026-11-17 17:08:17 +0000  Pre-registration amendment 1: calibration revealed headcount != capacity; add effective-agent rules C3/C4 before any holdout scoring
+ee623ca  2026-11-17 17:07:10 +0000  Add Erlang A (abandonment) to model with verification; bank adapter, queue_events schema, and pre-registered analysis code (no results yet)
+c4f978b  2026-11-17 17:04:02 +0000  Pre-register the real-data blind test (Anonymous Bank call center) before any model-vs-data comparison
+bff8a36  2026-11-13 17:44:28 +0000  Regenerate verification report with git revision stamped
+84ae8b3  2026-11-13 17:44:20 +0000  Operations Decision Model: verified engine, simulator, 4-layer test suite, data pipeline, stats framework, Streamlit portal
