@@ -1,4 +1,4 @@
-7a28f01  2026-11-17 17:11:22 +0000  Add commit log and bundle instructions
+# Commit history (every commit before the one that added this file; the bundle has all of them)
 380587b  2026-11-17 17:11:08 +0000  Holdout result (failed 1/6), real-data report with verdict, changelog C-006 to C-008, README status, sweep unit test
 4c8d4bd  2026-11-17 17:09:19 +0000  Phase 1 rerun under amendment 1 (Jan-Jun only): freeze V3 Erlang A + C3 effective agents
 b88300d  2026-11-17 17:08:17 +0000  Pre-registration amendment 1: calibration revealed headcount != capacity; add effective-agent rules C3/C4 before any holdout scoring
