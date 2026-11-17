@@ -243,6 +243,86 @@ def mmc(arrival_rate: float, service_rate: float, servers: int,
     )
 
 
+# ---------------------------------------------------------------------
+# E2b — Erlang A (M/M/c+M): customers who give up while waiting
+# ---------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class AbandonResult:
+    p_wait: float        # probability an arrival finds all servers busy
+    p_abandon: float     # probability an arrival gives up before service
+    Lq: float            # average number waiting
+    Wq_all: float        # average time in queue over ALL arrivals (hours),
+                         # counting abandoners' time until they leave
+    L_busy: float        # average number of busy servers
+    throughput: float    # served per hour = lam (1 - p_abandon)
+
+
+def erlang_a(arrival_rate: float, service_rate: float, servers: int,
+             abandon_rate: float) -> AbandonResult:
+    """M/M/c+M (Palm's model, 'Erlang A'). Each waiting customer gives up
+    after an exponential patience with rate theta = abandon_rate (/hr).
+
+    State k = number in system. Birth rate lam; death rate
+        k mu                    for k <= c
+        c mu + (k - c) theta    for k >  c
+    so the chain is stable for ANY load when theta > 0 (impatient
+    customers keep the line finite). Stationary probabilities follow from
+    detailed balance pi_{k+1} = pi_k lam / death(k+1); the infinite tail is
+    summed until terms fall below 1e-16 of the running total (truncation
+    error is bounded by the geometric tail and is far below test tolerance).
+
+    Outputs via Little's law: Wq_all = Lq / lam; and since each waiting
+    customer abandons at rate theta, the abandonment flow is theta Lq,
+    giving P(abandon) = theta Lq / lam.
+
+    theta == 0 is exactly Erlang C (delegated to mmc, which enforces
+    rho < 1). Derivation: changelog C-006; verified against Erlang C
+    (theta -> 0), the theta == mu Poisson identity, and an independent
+    abandonment simulation (tests/run_verification.py).
+    """
+    require_positive("arrival_rate", arrival_rate)
+    require_positive("service_rate", service_rate)
+    if servers < 1:
+        raise ModelError("servers must be >= 1")
+    if abandon_rate < 0:
+        raise ModelError("abandon_rate must be >= 0")
+    if abandon_rate == 0:
+        r = mmc(arrival_rate, service_rate, servers)
+        return AbandonResult(r.p_wait, 0.0, r.Lq, r.Wq,
+                             arrival_rate / service_rate, arrival_rate)
+
+    lam, mu, c, th = arrival_rate, service_rate, servers, abandon_rate
+    # Work in log space to avoid overflow at large loads.
+    logs = [0.0]
+    k = 0
+    while True:
+        k += 1
+        death = k * mu if k <= c else c * mu + (k - c) * th
+        logs.append(logs[-1] + math.log(lam) - math.log(death))
+        # Past the mode (ratio < 1) and negligible: stop.
+        if k > c and lam < death and logs[-1] - max(logs) < math.log(1e-16):
+            break
+        if k > 10_000_000:  # pragma: no cover - would need absurd inputs
+            raise ModelError("Erlang A tail did not converge")
+    m = max(logs)
+    w = np.exp(np.array(logs) - m)
+    pi = w / w.sum()
+    ks = np.arange(len(pi))
+    p_wait = float(pi[ks >= c].sum())
+    Lq = float(((ks - c).clip(min=0) * pi).sum())
+    busy = float((np.minimum(ks, c) * pi).sum())
+    p_ab = th * Lq / lam
+    return AbandonResult(
+        p_wait=check_probability("P(wait)", p_wait),
+        p_abandon=check_probability("P(abandon)", p_ab),
+        Lq=check_finite_nonnegative("Lq", Lq),
+        Wq_all=check_finite_nonnegative("Wq_all", Lq / lam),
+        L_busy=check_finite_nonnegative("busy servers", busy),
+        throughput=lam * (1 - p_ab),
+    )
+
+
 # =====================================================================
 # E3 — Inventory: newsvendor with normal demand
 # =====================================================================

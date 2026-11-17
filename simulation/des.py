@@ -128,6 +128,59 @@ def simulate_mmc(arrival_rate: float, service_rate: float, servers: int,
                          n_customers=len(w))
 
 
+# ---------------------------------------------------------------- abandonment
+
+@dataclass(frozen=True)
+class SimAbandonResult:
+    Wq_all: Estimate     # hours in queue, all arrivals (abandoners count
+                         # their time until leaving)
+    p_abandon: Estimate
+    n_customers: int
+
+
+def simulate_mmc_abandon(arrival_rate: float, service_rate: float,
+                         servers: int, abandon_rate: float,
+                         n_customers: int = 600_000, warmup: int = 60_000,
+                         seed: int = 13, cv_service: float = 1.0
+                         ) -> SimAbandonResult:
+    """FIFO multi-server queue where each caller has an exponential
+    patience (rate abandon_rate) and hangs up if not served in time.
+
+    Exact mechanics under FIFO: process callers in arrival order; the
+    earliest-free server time gives the moment caller i WOULD start. If
+    that wait exceeds the caller's patience, the caller leaves at
+    arrival + patience and never occupies a server (the server-free heap
+    is untouched). Otherwise service starts and the server is busy until
+    start + service. Later callers are unaffected by abandoners, which is
+    what makes this exact for FIFO.
+    """
+    rng = np.random.default_rng(seed)
+    A = np.cumsum(rng.exponential(1.0 / arrival_rate, n_customers))
+    patience = rng.exponential(1.0 / abandon_rate, n_customers)
+    if cv_service == 1.0:
+        S = rng.exponential(1.0 / service_rate, n_customers)
+    else:
+        shape = 1.0 / cv_service ** 2
+        S = rng.gamma(shape, 1.0 / (service_rate * shape), n_customers)
+    free = [0.0] * servers
+    heapq.heapify(free)
+    tq = np.empty(n_customers)
+    ab = np.zeros(n_customers)
+    for i in range(n_customers):
+        t_free = free[0]
+        start = A[i] if A[i] > t_free else t_free
+        wait = start - A[i]
+        if wait > patience[i]:
+            tq[i] = patience[i]
+            ab[i] = 1.0
+        else:
+            heapq.heapreplace(free, start + S[i])
+            tq[i] = wait
+    return SimAbandonResult(Wq_all=batch_means(tq[warmup:]),
+                            p_abandon=batch_means(ab[warmup:]),
+                            n_customers=n_customers - warmup)
+
+
 # ---------------------------------------------------------------- tandem sim
 
 @dataclass(frozen=True)

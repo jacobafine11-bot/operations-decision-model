@@ -93,6 +93,46 @@ def validate_orders(df: pd.DataFrame) -> ValidationReport:
     return rep
 
 
+QUEUE_EVENTS_COLUMNS = ["event_id", "station", "arrived_at", "left_queue_at",
+                        "outcome", "wait_s", "started_at", "finished_at",
+                        "service_s", "server"]
+
+
+def validate_queue_events(df: pd.DataFrame) -> ValidationReport:
+    """queue_events: service systems where customers can give up
+    (call centers, counters). One row per customer.
+    outcome is 'served' or 'abandoned'; abandoned rows have no service
+    fields by design, so missing-value checks are per outcome."""
+    rep = ValidationReport("queue_events", len(df))
+    missing = [c for c in QUEUE_EVENTS_COLUMNS if c not in df.columns]
+    if missing:
+        rep.add(f"missing columns {missing}", fatal=True)
+        return rep
+    bad_outcome = int((~df["outcome"].isin(["served", "abandoned"])).sum())
+    if bad_outcome:
+        rep.add(f"{bad_outcome:,} rows with unknown outcome", fatal=True)
+    served = df["outcome"] == "served"
+    n_null_served = int(df.loc[served, ["arrived_at", "started_at", "finished_at",
+                                        "service_s", "server"]].isna().any(axis=1).sum())
+    if n_null_served:
+        rep.add(f"{n_null_served:,} served rows missing service fields",
+                fatal=n_null_served / max(served.sum(), 1) > 0.05)
+    neg_wait = int((df["wait_s"] < 0).sum())
+    if neg_wait:
+        rep.add(f"{neg_wait:,} negative waits", fatal=neg_wait / len(df) > 0.01)
+    zero_svc = int((df.loc[served, "service_s"] == 0).sum())
+    if zero_svc:
+        rep.add(f"{zero_svc:,} served calls with 0 s recorded service "
+                f"({zero_svc/served.sum():.2%}); kept, as recorded")
+    dup = int(df.duplicated(subset=["event_id"]).sum())
+    if dup:
+        rep.add(f"{dup:,} duplicate event ids", fatal=dup / len(df) > 0.01)
+    ab = 1 - served.mean()
+    rep.add(f"abandonment {ab:.1%}; coverage {df['arrived_at'].min()} to "
+            f"{df['arrived_at'].max()}")
+    return rep
+
+
 def validate_demand(df: pd.DataFrame) -> ValidationReport:
     rep = ValidationReport("demand", len(df))
     missing = [c for c in DEMAND_COLUMNS if c not in df.columns]

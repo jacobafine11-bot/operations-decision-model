@@ -170,6 +170,24 @@ got = M.mmc(lam_, mu_, 1, service_cv=cv_).Wq
 check("M/G/1 correction == Pollaczek-Khinchine (algebra)",
       abs(got - pk) < 1e-12, f"Wq={got:.6f}, PK={pk:.6f}")
 
+# C-006 Erlang A exact identities.
+ea, ec = M.erlang_a(10.0, 4.0, 3, 1e-9), M.mmc(10.0, 4.0, 3)
+check("Erlang A with theta -> 0 equals Erlang C (C-006)",
+      abs(ea.Wq_all - ec.Wq) / ec.Wq < 1e-6,
+      f"Wq {ea.Wq_all:.9f} vs {ec.Wq:.9f}")
+ea = M.erlang_a(12.0, 3.0, 3, 3.0)   # theta == mu -> N ~ Poisson(lam/mu)
+pois = sp.poisson(4.0)
+lq_pois = float(sum((k - 3) * pois.pmf(k) for k in range(4, 200)))
+check("Erlang A with theta == mu matches Poisson identity (C-006)",
+      abs(ea.Lq - lq_pois) < 1e-10, f"Lq {ea.Lq:.12f} vs {lq_pois:.12f}")
+check("Erlang A flow balance: busy servers == throughput / mu",
+      abs(ea.L_busy - ea.throughput / 3.0) < 1e-10,
+      f"{ea.L_busy:.10f} vs {ea.throughput/3.0:.10f}")
+ea = M.erlang_a(14.0, 4.0, 3, 3.0)   # overloaded: lam > c mu
+check("Erlang A answers an overloaded system (lam > c mu)",
+      0 < ea.p_abandon < 1 and math.isfinite(ea.Wq_all),
+      f"P(abandon)={ea.p_abandon:.4f}; Erlang C would refuse")
+
 lam = M.traffic([2.0, 0.0], [[0.0, 1.0], [0.0, 0.0]])
 L_each = [M.mm1(l, mu).L for l, mu in zip(lam, (3.0, 4.0))]
 check("Jackson tandem L_total (2;3,4)", abs(sum(L_each) - 3.0) < 1e-12,
@@ -296,6 +314,18 @@ for cv_ in (1.5, 0.5):
     s = D.simulate_mmc(4.0, 6.0, 1, cv_service=cv_, seed=int(cv_ * 100),
                        n_customers=600_000, warmup=60_000)
     equiv_check(f"M/G/1 Wq, cv={cv_} (P-K exact, C-004)", th.Wq, s.Wq)
+
+# Erlang A (C-006) vs. the independent abandonment simulator, including
+# an overloaded system Erlang C cannot describe.
+for lam_, mu_, c_, th_ in ((10.0, 4.0, 3, 6.0), (14.0, 4.0, 3, 3.0),
+                           (20.0, 3.0, 8, 2.0)):
+    th = M.erlang_a(lam_, mu_, c_, th_)
+    s = D.simulate_mmc_abandon(lam_, mu_, c_, th_, seed=int(lam_ * 7),
+                               n_customers=1_000_000, warmup=100_000)
+    equiv_check(f"Erlang A Wq_all (lam={lam_}, mu={mu_}, c={c_}, theta={th_})",
+                th.Wq_all, s.Wq_all)
+    equiv_check(f"Erlang A P(abandon) (lam={lam_}, c={c_}, theta={th_})",
+                th.p_abandon, s.p_abandon)
 
 # Approximations: the multi-server Kingman factor, now the model default.
 th = M.mmc(10.0, 4.0, 3, service_cv=0.5)
@@ -471,6 +501,7 @@ must_raise("Zero or negative service cv", lambda: M.mmc(2.0, 4.0, 1, service_cv=
 must_raise("Routing rows sum > 1", lambda: M.traffic([1.0, 0.0], [[0.6, 0.6], [0.0, 0.0]]))
 must_raise("Flow-trapping routing", lambda: M.traffic([1.0, 1.0], [[0.0, 1.0], [1.0, 0.0]]))
 must_raise("Zero service rate", lambda: M.mm1(1.0, 0.0))
+must_raise("Negative abandonment rate", lambda: M.erlang_a(2.0, 4.0, 1, -1.0))
 must_raise("Network with overloaded station",
            lambda: M.evaluate(op_hr.with_changes(external_arrivals=(30.0, 0.0, 0.0))))
 
