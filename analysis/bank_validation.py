@@ -44,7 +44,7 @@ WORKWEEK = {6, 0, 1, 2, 3}          # Sun..Thu (pandas: Mon=0 .. Sun=6)
 HOURS = range(8, 22)                 # 08:00 .. 21:59
 MIN_ARRIVALS, MIN_AGENTS = 30, 2
 VARIANTS = ("V1", "V2", "V3")
-RULES = ("C1", "C2")
+RULES = ("C1", "C2", "C3", "C4")
 
 
 # ---------------------------------------------------------------- windows
@@ -84,6 +84,10 @@ def build_windows(df: pd.DataFrame) -> pd.DataFrame:
             h += pd.Timedelta(hours=1)
     w["c2"] = pd.Series(pres).reindex(w.index).fillna(0).round().clip(lower=1)
 
+    # C3: effective agents = time-average busy agents while >= 1 caller waits.
+    w["c3_raw"] = effective_agents(df).reindex(w.index)
+    w["c3"] = w["c3_raw"].round().clip(lower=1).fillna(w["c1"])
+
     # theta: abandonments per waiting-hour (censored exponential MLE).
     w["theta_per_hr"] = np.where(w["wait_sum_s"] > 0,
                                  w["abandoned"] / (w["wait_sum_s"] / 3600.0), 0.0)
@@ -96,7 +100,51 @@ def build_windows(df: pd.DataFrame) -> pd.DataFrame:
             & w["svc_mean_s"].notna() & (w["svc_mean_s"] > 0))
     w = w[keep].copy()
     w["half"] = np.where(w["win"].dt.month <= 6, "calibration", "holdout")
-    return w.reset_index(drop=True)
+
+    # C4: median C3 for the same weekday-hour over the 4 most recent PRIOR
+    # weeks that have one (nothing from the window itself); else C1.
+    w = w.sort_values("win").reset_index(drop=True)
+    c4 = []
+    hist: dict[tuple, list] = {}
+    for _, r in w.iterrows():
+        key = (r["dow"], r["hour"])
+        prior = [v for v in hist.get(key, []) if np.isfinite(v)][-4:]
+        c4.append(max(1.0, round(float(np.median(prior)))) if prior else float(r["c1"]))
+        hist.setdefault(key, []).append(r["c3_raw"])
+    w["c4"] = c4
+    return w
+
+
+def effective_agents(df: pd.DataFrame) -> pd.Series:
+    """Per hour window: integral of (busy agents) over the time the queue
+    is non-empty, divided by that time. Exact piecewise-constant sweep:
+    +1/-1 events for service start/end and for queue entry/exit of callers
+    who waited, plus zero-change events at every hour boundary so no
+    segment crosses a window."""
+    served = df[df["outcome"] == "served"]
+    waited = df[df["wait_s"] > 0]
+    t0 = df["arrived_at"].min().floor("h")
+    sec = lambda s: (s - t0).dt.total_seconds().to_numpy()  # noqa: E731
+    t_end = (df["left_queue_at"].max().ceil("h") + pd.Timedelta(days=1) - t0).total_seconds()
+    hours = np.arange(0.0, t_end, 3600.0)
+    times = np.concatenate([sec(served["started_at"]), sec(served["finished_at"]),
+                            sec(waited["arrived_at"]), sec(waited["left_queue_at"]), hours])
+    dbusy = np.concatenate([np.ones(len(served)), -np.ones(len(served)),
+                            np.zeros(2 * len(waited)), np.zeros(len(hours))])
+    dq = np.concatenate([np.zeros(2 * len(served)), np.ones(len(waited)),
+                         -np.ones(len(waited)), np.zeros(len(hours))])
+    order = np.argsort(times, kind="stable")
+    times, dbusy, dq = times[order], dbusy[order], dq[order]
+    busy, q = np.cumsum(dbusy), np.cumsum(dq)
+    dur = np.diff(times)
+    seg_win = np.floor(times[:-1] / 3600.0).astype(np.int64)
+    mask = (q[:-1] > 0) & (dur > 0)
+    qt = np.bincount(seg_win[mask], weights=dur[mask], minlength=len(hours))
+    bt = np.bincount(seg_win[mask], weights=(busy[:-1] * dur)[mask], minlength=len(hours))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        ceff = np.where(qt > 0, bt / qt, np.nan)
+    idx = t0 + pd.to_timedelta(np.arange(len(hours)) * 3600, unit="s")
+    return pd.Series(ceff, index=idx)
 
 
 # ---------------------------------------------------------------- predict
@@ -104,7 +152,7 @@ def build_windows(df: pd.DataFrame) -> pd.DataFrame:
 def predict(row, variant: str, rule: str, theta_override: float | None = None):
     lam = float(row["n"])                          # per hour (1-hour window)
     mu = 3600.0 / float(row["svc_mean_s"])         # per hour per agent
-    c = int(row["c1"] if rule == "C1" else row["c2"])
+    c = int(row[rule.lower()])
     try:
         if variant == "V1":
             r = M.mmc(lam, mu, c)
@@ -159,8 +207,26 @@ def holdout() -> int:
     frz = json.loads(FROZEN.read_text())
     V, R = frz["variant"], frz["rule"]
     w = build_windows(pd.read_parquet(DATA))
-    h = w[w["half"] == "holdout"].copy()
+    h_all = w[w["half"] == "holdout"].copy()
+    h, card, tost, by_hour, by_load = run_scorecard(h_all, V, R, frz)
+    extra = None
+    if R != "C4":   # Amendment 1: also score the forecast rule C4
+        _, card4, tost4, _, _ = run_scorecard(h_all, V, "C4", frz)
+        extra = (card4, tost4)
+    ctx = pd.DataFrame([score_selection(h_all, vv, rr) for vv in VARIANTS for rr in RULES])
+    h.to_csv(ROOT / "results" / "bank_holdout_windows.csv", index=False)
+    write_report(frz, card, tost, by_hour, by_load, ctx, len(h), extra)
+    for label, cd, ts in [(f"{V}+{R}", card, tost)] + ([(f"{V}+C4", *extra)] if extra else []):
+        print(f"Holdout scorecard {label}: {sum(c[4] for c in cd)}/{len(cd)} passed")
+        for c in cd:
+            print(f"  {c[0]} {'PASS' if c[4] else 'FAIL'}  {c[1]}: {c[2]} (need {c[3]})")
+        print(f"  TOST mean log ratio within ±log(1.25): p={ts.p_value:.3g}; "
+              f"mean ratio {math.exp(ts.diff):.3f}")
+    return 0
 
+
+def run_scorecard(h: pd.DataFrame, V: str, R: str, frz: dict):
+    h = h.copy()
     preds = [predict(r, V, R) for _, r in h.iterrows()]
     h["pred_wq_s"] = [p[0] for p in preds]
     h["pred_pab"] = [p[1] for p in preds]
@@ -208,8 +274,7 @@ def holdout() -> int:
         "obs abandon": d["abandoned"].sum() / d["n"].sum(),
         "pred abandon": (d["n"] * d["pred_pab"]).sum() / d["n"].sum(),
     }), include_groups=False)
-    v = v.assign(load=v["n"] * v["svc_mean_s"] / 3600.0 /
-                 (v["c1"] if R == "C1" else v["c2"]))
+    v = v.assign(load=v["n"] * v["svc_mean_s"] / 3600.0 / v[R.lower()])
     v["load band"] = pd.cut(v["load"], [0, 0.6, 0.8, 0.9, 1.0, 1.2, 10],
                             labels=["<0.6", "0.6-0.8", "0.8-0.9", "0.9-1.0", "1.0-1.2", ">1.2"])
     by_load = v.groupby("load band", observed=True).apply(lambda d: pd.Series({
@@ -219,28 +284,17 @@ def holdout() -> int:
         "median ratio": ((d["pred_wq_s"] + OFFSET_S) / (d["obs_wq_s"] + OFFSET_S)).median(),
     }), include_groups=False)
 
-    # Context only (computed AFTER the frozen run; used for no decision):
-    # how every candidate would have done on the holdout.
-    ctx = pd.DataFrame([score_selection(h, vv, rr) for vv in VARIANTS for rr in RULES])
-
-    h.to_csv(ROOT / "results" / "bank_holdout_windows.csv", index=False)
-    write_report(frz, card, tost, by_hour, by_load, ctx, len(h), s5)
-    passed = sum(c[4] for c in card)
-    print(f"Holdout scorecard: {passed}/{len(card)} criteria passed")
-    for c in card:
-        print(f"  {c[0]} {'PASS' if c[4] else 'FAIL'}  {c[1]}: {c[2]} (need {c[3]})")
-    print(f"  TOST mean log ratio within ±log(1.25): p={tost.p_value:.3g} "
-          f"({'equivalent' if tost.equivalent else 'not shown equivalent'}); "
-          f"mean ratio {math.exp(tost.diff):.3f}")
-    return 0
+    return h, card, tost, by_hour, by_load
 
 
-def write_report(frz, card, tost, by_hour, by_load, ctx, n_hold, cov):
+def write_report(frz, card, tost, by_hour, by_load, ctx, n_hold, extra):
     V, R = frz["variant"], frz["rule"]
     names = {"V1": "Erlang C, exponential service", "V2": "Erlang C, measured-cv correction",
              "V3": "Erlang A (abandonment), exponential service",
              "C1": "distinct agents serving in the hour",
-             "C2": "presence-weighted agents"}
+             "C2": "presence-weighted agents",
+             "C3": "effective agents (busy while callers wait)",
+             "C4": "staffing plan (median effective agents, prior 4 weeks)"}
     cal = pd.DataFrame(frz["calibration_table"]).sort_values("median_abs_log_ratio")
     L = [
         "# Real-Data Validation: Anonymous Bank Call Center (1999)",
@@ -287,6 +341,24 @@ def write_report(frz, card, tost, by_hour, by_load, ctx, n_hold, cov):
         f"{math.exp(tost.diff):.3f}, p = {tost.p_value:.3g}, "
         f"**{'equivalent within ±25%' if tost.equivalent else 'not shown equivalent within ±25%'}**.",
         "",
+    ]
+    if extra:
+        card4, tost4 = extra
+        L += [
+            f"### Forecast version: {V} with C4 (staffing plan from prior weeks only)",
+            "",
+            "Required by Amendment 1. Uses nothing from the hour being predicted "
+            "except its arrivals and service times; agent capacity comes from "
+            "the previous four weeks.",
+            "",
+            "| ID | Criterion | Result | Pass if | Verdict |",
+            "|---|---|---|---|---|",
+        ]
+        for c in card4:
+            L.append(f"| {c[0]} | {c[1]} | {c[2]} | {c[3]} | {'PASS' if c[4] else 'FAIL'} |")
+        L += ["", f"TOST (reported): mean ratio {math.exp(tost4.diff):.3f}, "
+                  f"p = {tost4.p_value:.3g}.", ""]
+    L += [
         "### By hour of day (holdout)",
         "",
         by_hour.round(3).to_markdown(),

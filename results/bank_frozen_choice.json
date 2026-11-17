@@ -1,0 +1,94 @@
+{
+  "frozen_utc": "2026-11-17T17:09:10+00:00",
+  "variant": "V3",
+  "rule": "C3",
+  "theta_pooled_calibration_per_hr": 9.475696791918848,
+  "calibration_windows": 1664,
+  "holdout_windows": 1783,
+  "calibration_table": [
+    {
+      "variant": "V1",
+      "rule": "C1",
+      "median_abs_log_ratio": 2.97700710547816,
+      "refusal_rate": 0.046875,
+      "windows": 1664
+    },
+    {
+      "variant": "V1",
+      "rule": "C2",
+      "median_abs_log_ratio": 3.233159279461696,
+      "refusal_rate": 0.02403846153846154,
+      "windows": 1664
+    },
+    {
+      "variant": "V1",
+      "rule": "C3",
+      "median_abs_log_ratio": Infinity,
+      "refusal_rate": 0.7487980769230769,
+      "windows": 1664
+    },
+    {
+      "variant": "V1",
+      "rule": "C4",
+      "median_abs_log_ratio": Infinity,
+      "refusal_rate": 0.6676682692307693,
+      "windows": 1664
+    },
+    {
+      "variant": "V2",
+      "rule": "C1",
+      "median_abs_log_ratio": 2.896153324101892,
+      "refusal_rate": 0.046875,
+      "windows": 1664
+    },
+    {
+      "variant": "V2",
+      "rule": "C2",
+      "median_abs_log_ratio": 3.203821416076006,
+      "refusal_rate": 0.02403846153846154,
+      "windows": 1664
+    },
+    {
+      "variant": "V2",
+      "rule": "C3",
+      "median_abs_log_ratio": Infinity,
+      "refusal_rate": 0.7487980769230769,
+      "windows": 1664
+    },
+    {
+      "variant": "V2",
+      "rule": "C4",
+      "median_abs_log_ratio": Infinity,
+      "refusal_rate": 0.6676682692307693,
+      "windows": 1664
+    },
+    {
+      "variant": "V3",
+      "rule": "C1",
+      "median_abs_log_ratio": 2.921277395380165,
+      "refusal_rate": 0.0,
+      "windows": 1664
+    },
+    {
+      "variant": "V3",
+      "rule": "C2",
+      "median_abs_log_ratio": 3.2516953040606382,
+      "refusal_rate": 0.0,
+      "windows": 1664
+    },
+    {
+      "variant": "V3",
+      "rule": "C3",
+      "median_abs_log_ratio": 0.7494623812140218,
+      "refusal_rate": 0.03125,
+      "windows": 1664
+    },
+    {
+      "variant": "V3",
+      "rule": "C4",
+      "median_abs_log_ratio": 0.7750978650140106,
+      "refusal_rate": 0.017427884615384616,
+      "windows": 1664
+    }
+  ]
+}
