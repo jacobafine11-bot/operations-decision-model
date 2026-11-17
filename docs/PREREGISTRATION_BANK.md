@@ -89,3 +89,37 @@ in aggregate, fails.
 
 Reported but not gated: TOST equivalence of the mean log ratio within
 ±log(1.25), by-hour-of-day table, by-load table.
+
+---
+
+## Amendment 1 (2026-11-17), committed before any holdout result
+
+**What happened.** Phase 1 (calibration half only) scored all six
+variant × rule combinations. Every one was off by a typical factor of
+about 18 (median absolute log ratio 2.9 to 3.3). Diagnosis, on calibration
+data only: the median window has 11 distinct agents (C1) but an offered
+load of only 5.2 agent-equivalents, so the model sees 47% utilization and
+predicts sub-second waits, while callers actually waited 49 s on average
+and 12% abandoned. Agents counted as on duty were not available to answer
+much of the time (after-call work that is not in the recorded service
+time, outbound work, breaks, skill restrictions by call type).
+**Headcount is not capacity.** Because every equation variant failed the
+same way, the fault is in the capacity input, not the queueing formulas.
+
+**Holdout status.** The July to December half has not been scored by any
+code. The frozen choice from Phase 1 is void and the phase is rerun under
+this amendment.
+
+**Two added agent-count rules.**
+
+| Rule | Definition | Role |
+|---|---|---|
+| C3 | Effective agents: the time-average number of agents busy with calls during the moments in the window when at least one caller is waiting, rounded to the nearest whole agent (minimum 1). If no one waited in the window, fall back to C1. | Structural test. Rationale: when a caller is waiting, every agent who is actually available is serving, so busy agents during waiting periods measure true staffing. Disclosure: it uses the timeline of when the queue was non-empty (not wait lengths). |
+| C4 | Staffing-plan estimate: the median C3 for the same weekday and hour over the 4 most recent prior weeks that have one; if none exist, fall back to C1. | Predictive test: uses nothing from the window being predicted, which is what a manager would actually have. |
+
+**Procedure (unchanged otherwise).** Rerun Phase 1 on January to June
+with variants V1 to V3 × rules C1 to C4, freeze the best by the same
+selection score, run the holdout once. Scorecard S1 to S6 unchanged. In
+addition, whichever variant is frozen is also scored on the holdout with
+C4 and that result is reported under the same S1 to S6 criteria, since
+C4 is the forecast a business could act on.
