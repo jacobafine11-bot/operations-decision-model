@@ -134,8 +134,7 @@ machine. Estimator exactness: DuckDB vs. independent engine agree to
 
 ## Full git history
 
-`opsproject.bundle` (repository root) holds the complete commit history,
-including the timestamps showing every pre-registration was committed
-before its results. To inspect it: `git clone opsproject.bundle check`
-then `git -C check log --date=iso`. A plain-text copy is in
-docs/GIT_HISTORY.txt.
+The commit history on GitHub is the evidence that every pre-registration
+was committed before its results: compare the timestamps of the
+PREREGISTRATION_BANK.md commits with the results commits
+(`git log --date=iso`). A plain-text copy is in docs/GIT_HISTORY.txt.
