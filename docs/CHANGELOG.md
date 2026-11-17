@@ -7,6 +7,70 @@ appear here.
 
 ---
 
+## C-008 — First real-data blind test FAILED (1/6); diagnosis and lessons
+**Date:** 2026-11-17
+**Triggered by:** Holdout run of the pre-registered Anonymous Bank test
+(docs/REAL_DATA_VALIDATION.md), frozen choice V3 Erlang A + C3.
+**Result, as recorded:** predicted waits about 2x too high (median ratio
+1.96, aggregate +121%), predicted abandonment 29% vs 15% observed, rank
+correlation across hours 0.24 (needed 0.70). Coverage passed (97%). The
+forecast version (C4, staffing from prior weeks) failed the same way.
+This result is not tuned away: the July to December half is no longer
+blind and will never again be used as a blind test.
+**Diagnosis (exploratory, calibration half):**
+1. The bias was visible before the holdout (calibration median ratio
+   1.74). The model-selection score measured the size of errors only, so
+   it could not see their direction. Lesson: the selection score must
+   penalize what the scorecard penalizes (bias as well as scatter).
+2. Rounding effective agents is not the cause (interpolating between
+   neighboring crew sizes gives 1.73).
+3. Leading hypothesis, mechanism-based: C3 counts busy agents during
+   the moments a line exists, and lines form precisely when fewer agents
+   are free. It therefore samples the worst moments of the hour and
+   understates the hour's average capacity, making every prediction
+   pessimistic. This is testable and is the first item for round 2.
+**Status of the model:** the equations remain exactly verified against
+simulation (76/76). What failed on real data is the measurement of
+effective capacity from records, which the equations take as given.
+**Round 2 plan:** pre-register a capacity estimator free of the
+selection effect, with a selection score that matches the scorecard,
+and a genuinely unseen blind set (a different real system: the Syosset
+distributor's stopwatch sample, or a second public dataset).
+
+## C-007 — Headcount is not capacity (real-data finding)
+**Date:** 2026-11-17
+**Triggered by:** Calibration phase of the bank test: every model variant
+was off by a typical factor of about 18 using agent headcount.
+**Mechanism:** Agents counted as on duty were available for inbound
+calls only about 38% of the time (after-call work outside the recorded
+service time, outbound work, breaks, skill restrictions). With headcount
+as capacity, the model sees 47% utilization and predicts sub-second
+waits; callers actually waited 49 s and 12% hung up.
+**Change:** Effective-agent estimators added to the analysis (C3: busy
+agents while a line exists; C4: the same from the prior four weeks,
+usable as a staffing plan). Pre-registered as Amendment 1 and committed
+before any holdout scoring. Error fell from a factor of about 18 to
+about 2 on the calibration half.
+**Implication for the project's thesis:** for a small operation, the
+input most likely to be wrong is effective capacity, and the model
+must measure it rather than accept a headcount.
+
+## C-006 — Erlang A: customers who give up (abandonment)
+**Date:** 2026-11-17
+**Triggered by:** Real call-center data: 15.3% of queued callers hang
+up, and in effective-capacity terms many hours are overloaded, which
+Erlang C cannot describe at all (it refuses about 70% of hours).
+**Change:** model/opsmodel.py `erlang_a()`: M/M/c+M birth-death chain
+with abandonment rate θ, summed exactly until the tail is below 1e-16;
+outputs by Little's law (Wq = Lq/λ, P(abandon) = θLq/λ). θ is estimated
+from data by the censored-exponential MLE (abandonments / total waiting
+time).
+**Verification:** θ → 0 reproduces Erlang C to 6e-9; θ = μ reproduces
+the Poisson identity to 1e-12; busy servers equal throughput/μ exactly;
+three scenarios (one overloaded) pass TOST equivalence against an
+independent abandonment simulator on both waiting time and abandonment
+probability. Suite now 76/76.
+
 ## C-005 — Validation standard set: TOST equivalence testing
 **Date:** 2026-11-13
 **Triggered by:** Independent Study 2 step 1 (the formal stats study,

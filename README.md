@@ -34,7 +34,7 @@ Decision rule: do a change set S iff V(S) > 0 **and** the sign survives
 sensitivity sweeps on every assumed cost input (the sensitivity()
 function reports flip points: "A beats B unless waiting cost exceeds $X").
 
-## Verification (four layers, 65/65 passing)
+## Verification (four layers, 76/76 passing)
 
 0. The statistical tests themselves are validated: TOST against its
    independent CI formulation (400/400), its firing rate at the margin
@@ -82,7 +82,35 @@ streamlit run portal/app.py           # the user-facing portal
   every simulation runs), CHANGELOG.md (every equation change with its
   mechanism), VERIFICATION_REPORT.md (generated tables with p-values).
 
+## Status (honest)
+
+| Layer | Against simulation | Against real data |
+|---|---|---|
+| Queueing equations (E1, E2, Erlang C, Erlang A) | exactly verified, 76/76 checks | first blind test **failed 1/6** (Anonymous Bank call center, 417k real calls): about 2x too pessimistic, because effective capacity is hard to measure from records (C-007, C-008) |
+| Inventory (E3) | verified | not yet tested on real data |
+| Decision layer (E5–E7) | behavior-tested | not yet tested on real data |
+
+The model is not yet ready to be trusted for a real business decision.
+The verification machinery that told us so is. Round 2 is planned in
+CHANGELOG C-008.
+
+## Real-data testing protocol
+
+Every real-data test is pre-registered (rules committed to git before
+any prediction is compared with data), selects among model options on a
+calibration half only, and runs the frozen choice once on a blind half.
+See docs/PREREGISTRATION_BANK.md and docs/REAL_DATA_VALIDATION.md; the
+commit history shows the order.
+
 ## Findings so far (see docs/CHANGELOG.md)
+
+- **C-008** First real-data blind test failed (1/6). Lesson: the score
+  used to choose a model must penalize bias, not only scatter.
+- **C-007** Headcount is not capacity: bank agents were available for
+  inbound calls about 38% of the time. With headcount as capacity the
+  model was off by a factor of about 18.
+- **C-006** Erlang A (abandonment) added and verified; Erlang C cannot
+  describe the overloaded hours that real call centers run through.
 
 - **C-004/C-001** Raw M/M/c overstates waits by ~35% when work is
   steadier than exponential; the variability factor (1+Cs²)/2 is now the
