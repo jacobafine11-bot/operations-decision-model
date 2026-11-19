@@ -34,8 +34,20 @@ def _base(chart: alt.Chart, height: int = 300) -> alt.Chart:
                        labelFontSize=12).configure_view(strokeWidth=0)
 
 
-def role_color(field: str = "Series", legend: bool = True):
-    return alt.Color(f"{field}:N", scale=alt.Scale(domain=ROLE_DOMAIN, range=ROLE_RANGE),
+def _present(df: pd.DataFrame | None, field: str):
+    """Only the roles actually drawn, in fixed order: a legend never names
+    a series that isn't on the chart, and colors never shift."""
+    if df is None:
+        return ROLE_DOMAIN, ROLE_RANGE, ROLE_DASH
+    have = set(df[field].unique())
+    idx = [i for i, r in enumerate(ROLE_DOMAIN) if r in have]
+    return ([ROLE_DOMAIN[i] for i in idx], [ROLE_RANGE[i] for i in idx],
+            [ROLE_DASH[i] for i in idx])
+
+
+def role_color(field: str = "Series", legend: bool = True, df: pd.DataFrame | None = None):
+    dom, rng, _ = _present(df, field)
+    return alt.Color(f"{field}:N", scale=alt.Scale(domain=dom, range=rng),
                      legend=alt.Legend(title=None) if legend else None)
 
 
@@ -98,12 +110,13 @@ def batch_dots(batch_means: np.ndarray, theory: float, ci: tuple[float, float],
 def lines(df: pd.DataFrame, x: str, y: str, series: str, x_title: str, y_title: str,
           log_y: bool = False, points: bool = True, height: int = 300) -> alt.Chart:
     """Up to three named series by role (Model / Simulation / Real data)."""
+    dom, _, dash = _present(df, series)
     enc = dict(
         x=alt.X(f"{x}:Q", title=x_title),
         y=alt.Y(f"{y}:Q", title=y_title,
                 scale=alt.Scale(type="log") if log_y else alt.Scale(zero=False)),
-        color=role_color(series),
-        strokeDash=alt.StrokeDash(f"{series}:N", scale=alt.Scale(domain=ROLE_DOMAIN, range=ROLE_DASH),
+        color=role_color(series, df=df),
+        strokeDash=alt.StrokeDash(f"{series}:N", scale=alt.Scale(domain=dom, range=dash),
                                   legend=None),
         tooltip=[alt.Tooltip(f"{series}:N", title="series"),
                  alt.Tooltip(f"{x}:Q", format=".3g", title=x_title),
@@ -112,7 +125,7 @@ def lines(df: pd.DataFrame, x: str, y: str, series: str, x_title: str, y_title: 
     ch = alt.Chart(df).mark_line(strokeWidth=2).encode(**enc)
     if points:
         ch = ch + alt.Chart(df).mark_circle(size=64).encode(
-            x=enc["x"], y=enc["y"], color=role_color(series, legend=False),
+            x=enc["x"], y=enc["y"], color=role_color(series, legend=False, df=df),
             tooltip=enc["tooltip"])
     return _base(ch, height)
 

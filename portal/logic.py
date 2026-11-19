@@ -64,12 +64,14 @@ def build_operation(stations_df: pd.DataFrame, arrival_rate: float,
 
 def station_table(op: M.Operation) -> tuple[pd.DataFrame, str]:
     b = M.evaluate(op)
+    cas = M.arrival_variability(op, b.loads)
     rows = []
-    for st, load, r in zip(op.stations, b.loads, b.station_results):
+    for st, load, r, ca in zip(op.stations, b.loads, b.station_results, cas):
         rows.append({
             "Station": st.name,
             "Workers": st.servers,
             "Load (orders/hr)": round(load, 2),
+            "Arrival variability (cv)": round(ca, 2),
             "Utilization": f"{r.rho:.0%}",
             "Chance an order waits": f"{r.p_wait:.0%}",
             "Avg orders waiting": round(r.Lq, 2),

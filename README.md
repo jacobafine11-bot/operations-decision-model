@@ -34,7 +34,7 @@ Decision rule: do a change set S iff V(S) > 0 **and** the sign survives
 sensitivity sweeps on every assumed cost input (the sensitivity()
 function reports flip points: "A beats B unless waiting cost exceeds $X").
 
-## Verification (four layers, 76/76 passing)
+## Verification (four layers, 84/84 passing)
 
 0. The statistical tests themselves are validated: TOST against its
    independent CI formulation (400/400), its firing rate at the margin
@@ -71,10 +71,9 @@ streamlit run portal/app.py           # the user-facing portal
 - **Source of truth:** a private GitHub repository (this folder is a
   ready-to-push git repo). Version history, issues, and free deploys
   hang off it.
-- **Interface:** the Streamlit portal (`portal/app.py`) — describe an
-  operation, see utilization, bottleneck, profit, and a ranked table of
-  change plans with an honesty check (the flip point). Deployable free
-  on Streamlit Community Cloud straight from the repo.
+- **Interface:** the portal, a full program (`portal/app.py`) with ten
+  pages. See "The portal" below. Deployable free on Streamlit Community
+  Cloud straight from this repository (main file `portal/app.py`).
 - **Notebooks:** `notebooks/colab_quickstart.ipynb` runs the full suite
   and a worked decision in Google Colab with zero setup.
 - **Docs:** NOTATION.md (symbols/units/provenance), STATS_STUDY.md (the
@@ -82,11 +81,33 @@ streamlit run portal/app.py           # the user-facing portal
   every simulation runs), CHANGELOG.md (every equation change with its
   mechanism), VERIFICATION_REPORT.md (generated tables with p-values).
 
+## The portal
+
+Run it: `pip install -r requirements.txt` then `streamlit run portal/app.py`
+(from the repository root, so the theme in `.streamlit/` loads).
+
+| Page | What it does |
+|---|---|
+| Overview | What the model is, an honest status table, where to go next |
+| Model workbench | Describe an operation, see utilization, bottleneck, profit; rank changes with interactions and the flip point; size one crew (with or without customers who give up) |
+| Mock company walkthrough | Harbor Supply Co. (fictional, with a known answer key): order history, validation gate, estimates, predictions checked against the history, ranked decisions, and a re-simulation that checks whether the decision delivered |
+| Simulation lab | Run the independent simulator live (one station, customers who give up, a line of stations); watch it converge; TOST verdict; sample-size estimate |
+| Statistics lab | TOST step by step; why a plain t-test would pass a wrong model; chi-square and KS input checks on real Tyler's Grill data; the tests, tested |
+| Fine-tuning journal | Every changelog entry with mechanism, evidence, and a live demonstration |
+| Real-data test | The pre-registered bank test: git timeline, scorecard recomputed live, charts, why it failed |
+| Verification suite | Run all 84 checks from the page; run history; the full report |
+| Data pipeline | Upload an order CSV and run the gate and estimation; the standard format; scale proof |
+| Documents | Every document in the repository |
+
+Portal tests: `python tests/test_portal_pages.py` executes every page and
+clicks the buttons that run real work (12 checks).
+
 ## Status (honest)
 
 | Layer | Against simulation | Against real data |
 |---|---|---|
-| Queueing equations (E1, E2, Erlang C, Erlang A) | exactly verified, 76/76 checks | first blind test **failed 1/6** (Anonymous Bank call center, 417k real calls): about 2x too pessimistic, because effective capacity is hard to measure from records (C-007, C-008) |
+| Variability down a line of stations (C-009) | held-out check passed: error 24.3% → 5.9% | not yet |
+| Queueing equations (E1, E2, Erlang C, Erlang A) | exactly verified, 84/84 checks | first blind test **failed 1/6** (Anonymous Bank call center, 417k real calls): about 2x too pessimistic, because effective capacity is hard to measure from records (C-007, C-008) |
 | Inventory (E3) | verified | not yet tested on real data |
 | Decision layer (E5–E7) | behavior-tested | not yet tested on real data |
 
@@ -104,6 +125,9 @@ commit history shows the order.
 
 ## Findings so far (see docs/CHANGELOG.md)
 
+- **C-009** Variability passes down a line of stations (QNA linking
+  equation). Found through the mock company; a pre-registered held-out
+  check on four new configurations cut downstream error from 24.3% to 5.9%.
 - **C-008** First real-data blind test failed (1/6). Lesson: the score
   used to choose a model must penalize bias, not only scatter.
 - **C-007** Headcount is not capacity: bank agents were available for

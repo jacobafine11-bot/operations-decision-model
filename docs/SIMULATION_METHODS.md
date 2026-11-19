@@ -17,6 +17,7 @@ arithmetic, agreement would be circular.
 | `simulate_tandem` | stations in a row | Exact departure recursions: D¹_i = max(A_i, D¹_{i−1}) + S¹_i, then each later stage D^k_i = max(D^{k−1}_i, D^k_{i−1}) + S^k_i. |
 | `simulate_mmc_absenteeism` | crew with sick days | Each worker independently misses a day with probability p; each day runs as its own finite-horizon queue with the surviving crew (zero-worker days: one emergency server at half speed — a stated modeling choice). |
 | `newsvendor_brute_force` | stock-level cost curve | One million demand draws, cost evaluated at 400 candidate stock levels, minimum taken by brute force. |
+| `eventlog.generate_orders` | an order-by-order history for a line of crews | FIFO crews in series with gamma work times; arrivals at each station re-sorted before assignment; millisecond timestamps. Plays a company's system export in the mock walkthrough and the C-009 held-out check. |
 | `pipeline/scale_test.py` | a synthetic year of history | 5M order events with known ground-truth rates at millisecond timestamps, plus 250 SKUs × 365 days of gamma demand; exists to prove the data pipeline recovers known truth at full scale. |
 
 ## 2. Randomness and reproducibility
@@ -59,7 +60,7 @@ customers where low-utilization cases run 400k.
 | This project's cloud workspace (Linux, Python 3.11+) | development and the runs behind the current report | where all current numbers were produced; run records capture the platform string |
 | Any laptop | full suite | `pip install -r requirements.txt`, then `python tests/run_verification.py` (≈7 s) and `python pipeline/scale_test.py` (≈5 s) |
 | Google Colab | heavier experiments, sharing with the teacher | `notebooks/colab_quickstart.ipynb` installs dependencies and runs the full suite in the browser, no setup |
-| Streamlit (local or Community Cloud) | the user-facing portal | the portal calls the closed-form model for instant answers and displays stored simulation results; long simulations are run by the suite, not inside the page |
+| Streamlit portal (local or Community Cloud) | interactive runs | the Simulation lab runs the same simulators live (up to 1M customers, cached per setting); the Mock company page re-simulates decisions; the Verification page runs the full suite on demand |
 
 ## 6. Transparency rules
 
