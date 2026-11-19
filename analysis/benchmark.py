@@ -42,7 +42,8 @@ BANDS = {"S": (2, 100, 2, 6), "L": (100, 250, 3, 7)}
 SETS = {"dev": ("orig", range(0, 20)), "sealed": ("orig", range(20, 40)),
         "hard_dev": ("hard", range(0, 10)), "hard_sealed": ("hard", range(20, 40))}
 HEURISTIC = "Process change at bottleneck"   # rule-of-thumb baseline (Amendment 1)
-N_HISTORY, N_TRUTH, N_PLAN, REPS = 30_000, 100_000, 20_000, 4
+N_HISTORY, N_TRUTH, N_PLAN, REPS = 30_000, 200_000, 20_000, 4
+TRUTH_RUNS = 4      # Amendment 2: truth = mean of 4 runs of 200,000 orders
 RESULTS = ROOT / "results"
 
 
@@ -171,9 +172,13 @@ def assess(co: Company) -> dict:
 
     out = {"band": co.band, "idx": co.idx, "workers": co.workers, "stations": k,
            "lam": co.lam, "gate_fatal": gate.fatal}
-    # 2. Truth for predictions.
-    true_waits, true_total = line_times(co.lam, list(co.stations), N_TRUTH, co.seed + 2)
-    out.update(true_total_h=true_total, true_waits_h=true_waits)
+    # 2. Truth for predictions (Amendment 2: mean of TRUTH_RUNS independent runs).
+    runs = [line_times(co.lam, list(co.stations), N_TRUTH, co.seed + 2 + 1000 * r) for r in range(TRUTH_RUNS)]
+    W = np.array([w for w, _ in runs])
+    T = np.array([t for _, t in runs])
+    out.update(true_total_h=float(T.mean()), true_waits_h=[float(x) for x in W.mean(axis=0)],
+               true_total_se_h=float(T.std(ddof=1) / np.sqrt(TRUTH_RUNS)),
+               true_waits_se_h=[float(x) for x in W.std(axis=0, ddof=1) / np.sqrt(TRUTH_RUNS)])
     try:
         b = M.evaluate(op)
         out.update(pred_total_h=float(sum(r.W for r in b.station_results)),
@@ -343,7 +348,7 @@ def freeze() -> int:
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
-    if cmd in ("dev", "sealed"):
+    if cmd in SETS:
         raise SystemExit(run_set(cmd))
     if cmd == "freeze":
         raise SystemExit(freeze())

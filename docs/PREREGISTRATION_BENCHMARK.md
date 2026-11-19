@@ -116,6 +116,30 @@ keeps simulation noise on near-tied plans from counting as a model error.
 (band S: 7/7; band L: 6/6 defined criteria). The model is frozen at the
 commit containing this amendment.
 
+## Amendment 2 (2026-11-19), committed before either sealed set was run
+
+**What the hard check set showed about the TEST.** Six stations missed
+by more than 15%, all at 81% to 94% utilization. Re-running them with
+the true inputs and a far longer truth:
+- Most misses were **estimation amplification**: near capacity, a 1%
+  error in a measured work speed becomes a 15% to 40% error in predicted
+  wait. With true inputs, those errors shrank to 2% to 15%. This is a
+  property of queues, reported as a finding, not a model bug.
+- One "miss" was **noise in the truth itself**: station L1-1 (93%
+  utilization) had a recorded true wait of 1.70 min from one
+  100,000-order run; five runs of 200,000 orders give 1.32 min
+  (run-to-run sd 0.06), and the model predicted 1.33 min.
+- One is a **real model miss**: station L8-5 (6 workers, 89% utilization,
+  very steady work, cv 0.33, fifth in the line): model 0.72 min, precise
+  truth 1.04 min (−31%). Recorded as a known limitation; the model may
+  not be changed on the basis of the hard check set.
+
+**Change to the measurement (not to the model or thresholds).** For
+P1 to P3 the truth becomes the mean of 4 independent runs of 200,000
+orders each (800,000 orders, previously one run of 100,000), and the
+truth's own standard error is recorded per station. Plan values (D1 to
+D4) are unchanged.
+
 ## Rules for the development set
 
 Fixes are allowed only with a mechanism, a changelog entry, and the
