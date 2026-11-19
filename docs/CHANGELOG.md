@@ -7,6 +7,29 @@ appear here.
 
 ---
 
+## C-013 — Real-data round 2: a real warehouse and a real factory
+**Date:** 2026-11-19
+**What was run:** pre-registered (319b60f) tests on the project's target
+kinds of operation (docs/REAL2_REPORT.md).
+**Results (run once):**
+- Warehouse inventory, 140 products, 19 unseen weeks: 90% target →
+  90.6% delivered (PASS); 95% → 92.9% (PASS); 80% → 86.3% (FAIL,
+  overstocks).
+- Factory job shop: correct bottleneck identified (PASS); workload per
+  machine off by a median 36.9% (FAIL).
+**Findings (exploratory diagnosis, after the results):**
+1. Skewed demand: symmetric products hit 80.3% at the 80% target;
+   right-skewed products (most) hit 88.5%. Next model change: a skewed
+   demand distribution, to be tested on data not used here.
+2. Right-censoring in the factory test: the data ends mid-route for
+   orders that started in March (7.1 recorded steps vs 13.8). A test-
+   design flaw: compare only completed work next time.
+3. Wave arrivals: the warehouse creates orders in batches (32,634 orders
+   in 768 distinct minutes, up to 594 at once; variance 85 to 288 times
+   the mean per 15 minutes). The random-arrival assumption fails for
+   wave-based distributors. Next model change: batch arrivals.
+No model change was made in response; each fix needs fresh data to prove.
+
 ## C-012 — Ranges include the formula's own approximation error
 **Date:** 2026-11-19
 **Triggered by:** Coverage round 1 (C-011) FAILED on station waits: only
