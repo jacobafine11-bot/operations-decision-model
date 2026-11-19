@@ -170,6 +170,25 @@ got = M.mmc(lam_, mu_, 1, service_cv=cv_).Wq
 check("M/G/1 correction == Pollaczek-Khinchine (algebra)",
       abs(got - pk) < 1e-12, f"Wq={got:.6f}, PK={pk:.6f}")
 
+# C-009 QNA linking equation: exact limiting cases.
+check("QNA: Poisson in + exponential service -> Poisson out (Burke)",
+      abs(M.departure_scv(1.0, 1.0, 0.85, 3) - 1.0) < 1e-12,
+      f"Cd^2 = {M.departure_scv(1.0, 1.0, 0.85, 3):.12f}")
+check("QNA: idle single server passes arrivals through (rho -> 0)",
+      abs(M.departure_scv(0.37, 0.5, 0.0, 1) - 0.37) < 1e-12,
+      f"Cd^2 = {M.departure_scv(0.37, 0.5, 0.0, 1):.12f}")
+check("QNA: saturated single server passes service through (rho -> 1)",
+      abs(M.departure_scv(1.9, 0.6, 1.0, 1) - 0.36) < 1e-12,
+      f"Cd^2 = {M.departure_scv(1.9, 0.6, 1.0, 1):.12f}")
+ra, rb = M.mmc(10.0, 4.0, 3, 0.7), M.mmc(10.0, 4.0, 3, 0.7, arrival_cv=1.0)
+check("arrival_cv = 1 changes nothing (C-009 reduction)",
+      abs(ra.Wq - rb.Wq) < 1e-15, "identical to the C-004 model")
+_net = M.Operation(stations=(M.Station("a", 5.0, 2), M.Station("b", 9.0, 1)),
+                   external_arrivals=(4.0, 1.0), routing=((0.0, 1.0), (0.0, 0.0)))
+check("Non-serial network keeps random arrivals (documented limit)",
+      M.arrival_variability(_net, M.traffic(_net.external_arrivals, _net.routing)) == [1.0, 1.0],
+      "outside orders enter two stations, so no propagation is attempted")
+
 # C-006 Erlang A exact identities.
 ea, ec = M.erlang_a(10.0, 4.0, 3, 1e-9), M.mmc(10.0, 4.0, 3)
 check("Erlang A with theta -> 0 equals Erlang C (C-006)",
@@ -337,6 +356,21 @@ s_hivar = D.simulate_mmc(10.0, 4.0, 3, cv_service=1.4, seed=101,
                          n_customers=600_000, warmup=60_000)
 approx_check("M/G/3 Wq, cv=1.4 (Kingman, C-004)", th.Wq, s_hivar.Wq,
              tol=0.12, basis="Allen-Cunneen/Kingman factor, high variability")
+
+# C-009: serial line with non-exponential crews, QNA-corrected model vs.
+# event-log simulation (approximation: labeled, held to tolerance).
+from eventlog import StationTruth, generate_orders, observed_station_times  # noqa: E402
+_sts = [StationTruth("P", 8.0, 3, 0.8), StationTruth("K", 13.0, 2, 0.6),
+        StationTruth("L", 30.0, 1, 1.0)]
+_op = M.Operation(stations=tuple(M.Station(s.name, s.service_rate, s.workers, s.cv) for s in _sts),
+                  external_arrivals=(22.0, 0.0, 0.0),
+                  routing=((0, 1, 0), (0, 0, 1), (0, 0, 0)))
+_obs = observed_station_times(generate_orders(22.0, _sts, 200_000, 77)).set_index("station")
+for _s, _r in zip(_sts, M.evaluate(_op).station_results):
+    _o = float(_obs.loc[_s.name, "obs_wait_h"])
+    approx_check(f"Serial line wait at {_s.name} (QNA, C-009)", _r.Wq,
+                 D.Estimate(_o, 0.0), tol=0.20,
+                 basis="QNA linking equation + Kingman; event-log simulation, 200k orders")
 
 # Absenteeism: binomial mixture of Erlang C as the model's approximation.
 lam_, mu_, c_, p_abs = 10.0, 4.0, 3, 0.08

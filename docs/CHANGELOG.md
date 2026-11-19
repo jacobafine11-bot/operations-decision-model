@@ -7,6 +7,37 @@ appear here.
 
 ---
 
+## C-009 — Arrival variability propagates down a serial line (QNA)
+**Date:** 2026-11-19
+**Triggered by:** The mock distributor (portal): with estimates within 1%
+of the truth, predicted waits were right at the first station (−5%) but
+24% and 43% too high at the second and third.
+**Mechanism:** The model treated every station's arrivals as random
+(Poisson). Inside a line, a station's arrivals are the previous
+station's departures; a busy crew releases work at the pace of its own
+(steadier) work times, so downstream arrivals are smoother than random
+and lines are shorter. Whitt's QNA linking equation (Whitt, 1983) gives
+the departure variability:
+Cd² = 1 + (1 − ρ²)(Ca² − 1) + ρ²(Cs² − 1)/√c, and the wait factor
+becomes (Ca² + Cs²)/2.
+**Change:** `mmc()` takes `arrival_cv`; `evaluate()` propagates it
+station by station for serial lines (`arrival_variability()`); other
+network shapes keep random arrivals, a documented limit.
+**Verification:**
+- Exact limiting cases in the suite: Poisson in + exponential service
+  gives Poisson out (Burke); an idle server passes arrivals through; a
+  saturated one passes service through; arrival_cv = 1 changes nothing.
+- Held-out check, pre-registered in `analysis/qna_heldout.py` and
+  committed (acbc157, 17:04:53) before its first run: four new line
+  configurations, 200,000 simulated orders each. Downstream-station
+  wait error fell from 24.3% to 5.9% on average; all six judged
+  stations within ±10% (rule: ±25%). Rule (a) PASS, rule (b) PASS.
+  Includes a case where an erratic first station correctly RAISES the
+  next station's predicted wait (error −22.6% → −0.9%).
+- Development numbers on the mock configuration (not evidence, shown for
+  transparency): packing 24% → 8%, loading 43% → 16%.
+Suite now 84/84.
+
 ## C-008 — First real-data blind test FAILED (1/6); diagnosis and lessons
 **Date:** 2026-11-17
 **Triggered by:** Holdout run of the pre-registered Anonymous Bank test

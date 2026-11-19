@@ -78,23 +78,10 @@ class SimQueueResult:
     n_customers: int
 
 
-def simulate_mmc(arrival_rate: float, service_rate: float, servers: int,
-                 n_customers: int = 400_000, warmup: int = 40_000,
-                 seed: int = 7, cv_service: float = 1.0) -> SimQueueResult:
-    """FIFO G/G/c simulator via the server-availability heap.
-
-    For each customer i with arrival A_i: pop the earliest server-free
-    time, start at max(A_i, free), depart at start + S_i. Exact for FIFO
-    multi-server queues (no events are ever out of order because arrivals
-    are processed in arrival order and the heap always yields the server
-    that frees first).
-
-    cv_service: coefficient of variation of service times.
-      1.0 -> exponential (M/M/c). Other values use a gamma distribution
-      with the same mean, letting tests break the exponential assumption
-      on purpose (M/G/c has no exact closed form; the model's error there
-      is a finding, not a bug).
-    """
+def trace_mmc(arrival_rate: float, service_rate: float, servers: int,
+              n_customers: int, seed: int, cv_service: float = 1.0):
+    """Raw per-customer trace (arrival times, waits, times in system), all
+    in hours. simulate_mmc() summarizes this; the portal plots it."""
     rng = np.random.default_rng(seed)
     inter = rng.exponential(1.0 / arrival_rate, n_customers)
     arrivals = np.cumsum(inter)
@@ -116,7 +103,28 @@ def simulate_mmc(arrival_rate: float, service_rate: float, servers: int,
         heapq.heappush(free, dep)
         waits[i] = start - arrivals[i]
         sojourn[i] = dep - arrivals[i]
+    return arrivals, waits, sojourn
 
+
+def simulate_mmc(arrival_rate: float, service_rate: float, servers: int,
+                 n_customers: int = 400_000, warmup: int = 40_000,
+                 seed: int = 7, cv_service: float = 1.0) -> SimQueueResult:
+    """FIFO G/G/c simulator via the server-availability heap.
+
+    For each customer i with arrival A_i: pop the earliest server-free
+    time, start at max(A_i, free), depart at start + S_i. Exact for FIFO
+    multi-server queues (no events are ever out of order because arrivals
+    are processed in arrival order and the heap always yields the server
+    that frees first).
+
+    cv_service: coefficient of variation of service times.
+      1.0 -> exponential (M/M/c). Other values use a gamma distribution
+      with the same mean, letting tests break the exponential assumption
+      on purpose (M/G/c has no exact closed form; the model's error there
+      is a finding, not a bug).
+    """
+    arrivals, waits, sojourn = trace_mmc(arrival_rate, service_rate, servers,
+                                         n_customers, seed, cv_service)
     w = waits[warmup:]
     s = sojourn[warmup:]
     lam_hat = (len(arrivals) - warmup) / (arrivals[-1] - arrivals[warmup])
@@ -138,22 +146,10 @@ class SimAbandonResult:
     n_customers: int
 
 
-def simulate_mmc_abandon(arrival_rate: float, service_rate: float,
-                         servers: int, abandon_rate: float,
-                         n_customers: int = 600_000, warmup: int = 60_000,
-                         seed: int = 13, cv_service: float = 1.0
-                         ) -> SimAbandonResult:
-    """FIFO multi-server queue where each caller has an exponential
-    patience (rate abandon_rate) and hangs up if not served in time.
-
-    Exact mechanics under FIFO: process callers in arrival order; the
-    earliest-free server time gives the moment caller i WOULD start. If
-    that wait exceeds the caller's patience, the caller leaves at
-    arrival + patience and never occupies a server (the server-free heap
-    is untouched). Otherwise service starts and the server is busy until
-    start + service. Later callers are unaffected by abandoners, which is
-    what makes this exact for FIFO.
-    """
+def trace_mmc_abandon(arrival_rate: float, service_rate: float, servers: int,
+                      abandon_rate: float, n_customers: int, seed: int,
+                      cv_service: float = 1.0):
+    """Raw trace: time in queue (hours) and abandon flag per caller."""
     rng = np.random.default_rng(seed)
     A = np.cumsum(rng.exponential(1.0 / arrival_rate, n_customers))
     patience = rng.exponential(1.0 / abandon_rate, n_customers)
@@ -176,6 +172,27 @@ def simulate_mmc_abandon(arrival_rate: float, service_rate: float,
         else:
             heapq.heapreplace(free, start + S[i])
             tq[i] = wait
+    return tq, ab
+
+
+def simulate_mmc_abandon(arrival_rate: float, service_rate: float,
+                         servers: int, abandon_rate: float,
+                         n_customers: int = 600_000, warmup: int = 60_000,
+                         seed: int = 13, cv_service: float = 1.0
+                         ) -> SimAbandonResult:
+    """FIFO multi-server queue where each caller has an exponential
+    patience (rate abandon_rate) and hangs up if not served in time.
+
+    Exact mechanics under FIFO: process callers in arrival order; the
+    earliest-free server time gives the moment caller i WOULD start. If
+    that wait exceeds the caller's patience, the caller leaves at
+    arrival + patience and never occupies a server (the server-free heap
+    is untouched). Otherwise service starts and the server is busy until
+    start + service. Later callers are unaffected by abandoners, which is
+    what makes this exact for FIFO.
+    """
+    tq, ab = trace_mmc_abandon(arrival_rate, service_rate, servers,
+                               abandon_rate, n_customers, seed, cv_service)
     return SimAbandonResult(Wq_all=batch_means(tq[warmup:]),
                             p_abandon=batch_means(ab[warmup:]),
                             n_customers=n_customers - warmup)

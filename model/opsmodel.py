@@ -199,7 +199,7 @@ def erlang_c(servers: int, offered_load: float) -> float:
 
 
 def mmc(arrival_rate: float, service_rate: float, servers: int,
-        service_cv: float = 1.0) -> QueueResult:
+        service_cv: float = 1.0, arrival_cv: float = 1.0) -> QueueResult:
     """Multi-server queue: a crew of `servers` workers, each working at
     `service_rate` (orders/hr), shared FIFO line, Poisson arrivals.
 
@@ -218,17 +218,25 @@ def mmc(arrival_rate: float, service_rate: float, servers: int,
       * service_cv == 1 reduces exactly to M/M/c (asserted in tests).
     p_wait stays the Erlang C value: exact at cv = 1, an approximation
     otherwise. Derivations: D2, D4, C-001.
+
+    arrival_cv (C-009): coefficient of variation of inter-arrival times.
+    1.0 for random (Poisson) arrivals. Inside a serial line, a station's
+    arrivals are the previous station's departures, which are smoother;
+    evaluate() supplies that value from the QNA linking equation. The
+    factor generalizes to (Ca^2 + Cs^2)/2 — Kingman's approximation, never
+    exact when arrival_cv != 1.
     """
     require_positive("arrival_rate", arrival_rate)
     require_positive("service_rate", service_rate)
     require_positive("service_cv", service_cv)
+    require_positive("arrival_cv", arrival_cv)
     if servers < 1:
         raise ModelError("servers must be >= 1")
     a = arrival_rate / service_rate            # offered load (dimensionless)
     rho = a / servers
     require_stable(rho, f"M/M/{servers} station")
     C = erlang_c(servers, a)
-    variability = (1.0 + service_cv ** 2) / 2.0
+    variability = (arrival_cv ** 2 + service_cv ** 2) / 2.0
     Wq = C / (servers * service_rate - arrival_rate) * variability
     Lq = arrival_rate * Wq
     W = Wq + 1.0 / service_rate
@@ -469,6 +477,49 @@ class ProfitBreakdown:
     bottleneck: str             # name of the highest-utilization station
 
 
+def is_serial_line(op: Operation) -> bool:
+    """True when the network is a single line: all outside orders enter
+    station 0 and every station sends everything to the next one."""
+    n = len(op.stations)
+    P = np.asarray(op.routing, dtype=float)
+    g = np.asarray(op.external_arrivals, dtype=float)
+    want = np.zeros((n, n))
+    for j in range(n - 1):
+        want[j, j + 1] = 1.0
+    return bool(np.allclose(P, want) and g[0] > 0 and np.allclose(g[1:], 0.0))
+
+
+def departure_scv(arrival_scv: float, service_cv: float, rho: float, servers: int) -> float:
+    """QNA linking equation (Whitt 1983, multi-server form): squared
+    coefficient of variation of a station's DEPARTURE stream,
+
+        Cd^2 = 1 + (1 - rho^2)(Ca^2 - 1) + rho^2 (Cs^2 - 1) / sqrt(c).
+
+    A busy station passes on its own (service) variability; an idle one
+    passes on its arrivals' variability. Exact checks: single server with
+    rho -> 0 gives Ca^2; Poisson in with exponential service gives 1
+    (Burke's theorem)."""
+    return (1.0 + (1.0 - rho ** 2) * (arrival_scv - 1.0)
+            + rho ** 2 * (service_cv ** 2 - 1.0) / math.sqrt(servers))
+
+
+def arrival_variability(op: Operation, lam) -> list[float]:
+    """C-009. Arrival coefficient of variation at each station.
+    Serial lines: propagate departure variability down the line with the
+    QNA linking equation. Any other network: assume random (Poisson)
+    arrivals everywhere (cv 1), the pre-C-009 behavior; general-network
+    propagation (splits and merges) is not implemented."""
+    n = len(op.stations)
+    if n == 0 or not is_serial_line(op):
+        return [1.0] * n
+    out, scv = [], 1.0               # outside orders arrive at random
+    for st, l in zip(op.stations, lam):
+        out.append(math.sqrt(max(scv, 1e-12)))
+        rho = l / (st.servers * st.service_rate)
+        scv = max(departure_scv(scv, st.service_cv, min(rho, 0.999999), st.servers), 1e-12)
+    return out
+
+
 def evaluate(op: Operation) -> ProfitBreakdown:
     """E5. Price the whole operation in $/hour.
 
@@ -483,13 +534,14 @@ def evaluate(op: Operation) -> ProfitBreakdown:
     exceed neither demand nor bottleneck capacity.
     """
     lam = traffic(op.external_arrivals, op.routing)
+    arrival_cvs = arrival_variability(op, lam)
     results = []
-    for st, l in zip(op.stations, lam):
+    for st, l, ca in zip(op.stations, lam, arrival_cvs):
         if l <= 0:
             # Station sees no load: contributes nothing, trivially stable.
             results.append(QueueResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
             continue
-        results.append(mmc(l, st.service_rate, st.servers, st.service_cv))
+        results.append(mmc(l, st.service_rate, st.servers, st.service_cv, ca))
 
     demand = op.demand_rate if op.demand_rate is not None else float(np.sum(op.external_arrivals))
     capacity = min(
