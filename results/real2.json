@@ -1,0 +1,228 @@
+{
+ "R-A": {
+  "products_scored": 140,
+  "lumpy_products": 29,
+  "card": [
+   {
+    "id": "R-A2",
+    "target": 0.8,
+    "realized": 0.8631578947368421,
+    "pairs": 2660,
+    "band": [
+     0.75,
+     0.85
+    ],
+    "pass": false
+   },
+   {
+    "id": "R-A1",
+    "target": 0.9,
+    "realized": 0.9056390977443609,
+    "pairs": 2660,
+    "band": [
+     0.85,
+     0.95
+    ],
+    "pass": true
+   },
+   {
+    "id": "R-A3",
+    "target": 0.95,
+    "realized": 0.9293233082706767,
+    "pairs": 2660,
+    "band": [
+     0.9,
+     0.99
+    ],
+    "pass": true
+   }
+  ],
+  "extra": {
+   "R-A2": {
+    "lumpy": 0.8729582577132486,
+    "regular": 0.8605974395448079,
+    "empirical_quantile_baseline": 0.8150375939849624
+   },
+   "R-A1": {
+    "lumpy": 0.9038112522686026,
+    "regular": 0.9061166429587483,
+    "empirical_quantile_baseline": 0.8894736842105263
+   },
+   "R-A3": {
+    "lumpy": 0.925589836660617,
+    "regular": 0.930298719772404,
+    "empirical_quantile_baseline": 0.9281954887218045
+   }
+  },
+  "arrival_checks": [
+   {
+    "month": "2023-01",
+    "blocks": 612,
+    "mean": 3.2434640522875817,
+    "var_to_mean": 93.2539999257937,
+    "p": 0.0
+   },
+   {
+    "month": "2023-02",
+    "blocks": 648,
+    "mean": 4.044753086419753,
+    "var_to_mean": 178.5784081373427,
+    "p": 0.0
+   },
+   {
+    "month": "2023-03",
+    "blocks": 468,
+    "mean": 2.5705128205128207,
+    "var_to_mean": 130.917038239519,
+    "p": 0.0
+   },
+   {
+    "month": "2023-04",
+    "blocks": 468,
+    "mean": 3.7927350427350426,
+    "var_to_mean": 168.252977048587,
+    "p": 0.0
+   },
+   {
+    "month": "2023-05",
+    "blocks": 576,
+    "mean": 4.260416666666667,
+    "var_to_mean": 118.1680450728181,
+    "p": 0.0
+   },
+   {
+    "month": "2023-06",
+    "blocks": 720,
+    "mean": 3.4625,
+    "var_to_mean": 85.01618774571583,
+    "p": 0.0
+   },
+   {
+    "month": "2023-07",
+    "blocks": 612,
+    "mean": 2.996732026143791,
+    "var_to_mean": 106.59292469752111,
+    "p": 0.0
+   },
+   {
+    "month": "2023-08",
+    "blocks": 504,
+    "mean": 3.8373015873015874,
+    "var_to_mean": 287.99575247583783,
+    "p": 0.0
+   },
+   {
+    "month": "2023-09",
+    "blocks": 288,
+    "mean": 6.777777777777778,
+    "var_to_mean": 235.60587193693956,
+    "p": 0.0
+   },
+   {
+    "month": "2023-10",
+    "blocks": 252,
+    "mean": 3.5912698412698414,
+    "var_to_mean": 146.95986000748383,
+    "p": 0.0
+   }
+  ]
+ },
+ "R-C": {
+  "calibration_work_orders": 126,
+  "test_work_orders": 99,
+  "resources_scored": 10,
+  "unseen_resources_in_test": [],
+  "card": [
+   {
+    "id": "R-C1",
+    "value": 0.3694885361552016,
+    "pass": false
+   },
+   {
+    "id": "R-C2",
+    "predicted_busiest": "Quality Check 1",
+    "observed_top2": [
+     "Quality Check 1",
+     "Machine 6 - Turning & Milling"
+    ],
+    "pass": true
+   }
+  ],
+  "table": [
+   {
+    "resource": "Machine 1 - Lapping",
+    "predicted_ops": 140.642857142857,
+    "observed_ops": 79,
+    "error": 0.7802893309222405
+   },
+   {
+    "resource": "Machine 11 - Grinding",
+    "predicted_ops": 45.571428571428534,
+    "observed_ops": 33,
+    "error": 0.3809523809523798
+   },
+   {
+    "resource": "Machine 4 - Turning & Milling",
+    "predicted_ops": 47.14285714285711,
+    "observed_ops": 34,
+    "error": 0.38655462184873857
+   },
+   {
+    "resource": "Machine 5 - Turning & Milling",
+    "predicted_ops": 37.71428571428569,
+    "observed_ops": 41,
+    "error": -0.08013937282230033
+   },
+   {
+    "resource": "Machine 6 - Turning & Milling",
+    "predicted_ops": 32.99999999999998,
+    "observed_ops": 48,
+    "error": -0.31250000000000044
+   },
+   {
+    "resource": "Machine 7- Laser Marking",
+    "predicted_ops": 109.9999999999999,
+    "observed_ops": 81,
+    "error": 0.3580246913580234
+   },
+   {
+    "resource": "Machine 8 - Turning & Milling",
+    "predicted_ops": 32.214285714285694,
+    "observed_ops": 46,
+    "error": -0.29968944099378925
+   },
+   {
+    "resource": "Machine 9 - Turning & Milling",
+    "predicted_ops": 33.78571428571426,
+    "observed_ops": 26,
+    "error": 0.2994505494505486
+   },
+   {
+    "resource": "Packing",
+    "predicted_ops": 136.71428571428555,
+    "observed_ops": 67,
+    "error": 1.0405117270788886
+   },
+   {
+    "resource": "Quality Check 1",
+    "predicted_ops": 447.85714285714243,
+    "observed_ops": 282,
+    "error": 0.5881458966565334
+   }
+  ],
+  "predicted_load_top5": {
+   "Quality Check 1": 69.024,
+   "Machine 27 - Grinding": 17.597,
+   "Machine 3 - Round Grinding": 15.852,
+   "Machine 10 - Grinding": 13.704,
+   "Machine 1 - Lapping": 11.587
+  },
+  "observed_load_top5_hours": {
+   "Quality Check 1": 2454.7,
+   "Machine 6 - Turning & Milling": 1166.0,
+   "Machine 5 - Turning & Milling": 1000.2,
+   "Machine 9 - Turning & Milling": 777.4,
+   "Machine 4 - Turning & Milling": 706.6
+  }
+ }
+}
