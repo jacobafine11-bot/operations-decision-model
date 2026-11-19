@@ -7,6 +7,74 @@ appear here.
 
 ---
 
+## C-012 — Ranges include the formula's own approximation error
+**Date:** 2026-11-19
+**Triggered by:** Coverage round 1 (C-011) FAILED on station waits: only
+73.4% of 90% ranges contained the truth. Diagnosis: coverage was worst at
+quiet stations (44% below 70% utilization), where estimation error is
+tiny so ranges were narrow, while the formula's approximation error
+(about 6%) remained; downstream stations (line-variability approximation
+involved) covered 69%, first stations 90%.
+**Change:** each simulated draw also multiplies each station's wait by a
+log-normal factor whose spread is the formula's measured approximation
+error: 5.5% at first stations, 11.5% downstream. Those two numbers were
+measured ONLY on development companies (60 companies, 147 stations, true
+inputs vs precise truth; `analysis/approx_error.py`); the formula is
+unbiased there (mean log error about 0).
+**Verification:** coverage round 2, pre-registered (40f264a) before its
+first run, on 80 FRESH companies (indices 60 to 79): station waits 89.1%,
+total time 88.8%, near-capacity stations 86.5%. All three PASS. The
+suite checks that the approximation term alone reproduces the measured
+spread. Suite 87/87.
+
+## C-011 — Uncertainty ranges for every prediction
+**Date:** 2026-11-19
+**Triggered by:** C-010: near capacity, estimation error is amplified.
+**Mechanism:** a station's predicted wait depends on (1 − utilization);
+at 93% busy a 1% error in measured speed moves utilization by about 0.01
+and the wait by about 15%.
+**Change:** `model/uncertainty.py` re-runs the model over the sampling
+error of each estimate (arrival rate: relative SE 1/√n; mean work time:
+relative SE cv/√n) and reports a 90% range per station and for total
+time; a draw past capacity counts as an unbounded wait. Stations whose
+range exceeds ±25% are flagged "sensitive: collect more data".
+**Verification:** ranges collapse onto the point with unlimited data and
+narrow as data grows (suite). Coverage round 1, pre-registered (fea57d4)
+on 80 fresh companies: total time PASS (85.0%), near-capacity PASS
+(82.6%), station waits FAIL (73.4%) → C-012.
+
+## C-010 — 160-company benchmark: results and findings
+**Date:** 2026-11-19
+**What was run:** the pre-registered benchmark (docs/PREREGISTRATION_
+BENCHMARK.md, two amendments, all committed before the sealed runs):
+two size bands (2 to 100 and 100 to 250 workers), development and
+sealed sets, original and "hard decisions" generators; every company
+goes through the full pipeline (history → gate → estimates → model →
+best plan) and is graded against brute-force re-simulation of every
+plan on the true operation.
+**Sealed results (run once):**
+| Set | Band S (2-100) | Band L (100-250) |
+|---|---|---|
+| Original | 7/7 | 7/7 |
+| Hard decisions | 7/7 | 6/7 (P3 station waits 23.8% vs ≤ 15%) |
+The model chose the exact best plan in 78 of 80 sealed companies and a
+near-best plan in 80 of 80; a fixed rule of thumb was near-best in 31 of
+80. Median total-time error 0.4% to 1.3%; promised vs delivered savings
+2.6% to 7.3%.
+**Findings:**
+1. Estimation amplification near capacity: the hard L failure involved 4
+   stations at 88% to 95% utilization; with true inputs their median
+   error was 5.7%, with estimated inputs 23.8% → C-011.
+2. Decisions are robust to station-level errors: errors largely cancel
+   in before-vs-after comparisons.
+3. Test-design lessons fixed by amendment before sealed runs: decisions
+   were too predictable (hard set added); P3 undefined for big companies;
+   one-run truth too noisy near capacity (truth now 4 × 200,000 orders).
+4. Known model limit: a steady-work crew far down a line (L8 station 5,
+   cv 0.33, 89% busy) is under-predicted by about 31% even with true
+   inputs.
+The model itself was not changed during the benchmark.
+
 ## C-009 — Arrival variability propagates down a serial line (QNA)
 **Date:** 2026-11-19
 **Triggered by:** The mock distributor (portal): with estimates within 1%

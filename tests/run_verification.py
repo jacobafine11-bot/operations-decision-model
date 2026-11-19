@@ -189,6 +189,25 @@ check("Non-serial network keeps random arrivals (documented limit)",
       M.arrival_variability(_net, M.traffic(_net.external_arrivals, _net.routing)) == [1.0, 1.0],
       "outside orders enter two stations, so no propagation is attempted")
 
+# C-011/C-012 uncertainty ranges: exact limiting behavior.
+import uncertainty as U  # noqa: E402
+_lineop = M.Operation(stations=(M.Station("P", 8.0, 3, 0.8), M.Station("K", 13.0, 2, 0.6)),
+                      external_arrivals=(20.0, 0.0), routing=((0, 1), (0, 0)))
+_iv = U.intervals(_lineop, [10**12, 10**12], 10**12, include_approx=False, draws=200)
+_pt = M.evaluate(_lineop).station_results[0].Wq
+check("Ranges collapse to the point with unlimited data (C-011)",
+      abs(_iv.waits[0].lo - _pt) / _pt < 1e-4 and abs(_iv.waits[0].hi - _pt) / _pt < 1e-4,
+      f"[{_iv.waits[0].lo*60:.4f}, {_iv.waits[0].hi*60:.4f}] min around {_pt*60:.4f}")
+_w = [(lambda r: r.waits[0].hi - r.waits[0].lo)(U.intervals(_lineop, [n, n], n, include_approx=False, draws=400))
+      for n in (1_000, 10_000, 100_000)]
+check("Ranges narrow as data grows (C-011)", _w[0] > _w[1] > _w[2],
+      f"widths {[round(x*60, 2) for x in _w]} min for 1k, 10k, 100k orders")
+_a = U.intervals(_lineop, [10**12, 10**12], 10**12, include_approx=True, draws=4000, seed=3)
+_lr = np.log(_a.waits[1].hi / M.evaluate(_lineop).station_results[1].Wq)
+check("Approximation term alone gives the measured spread (C-012)",
+      abs(_lr - 1.645 * U.APPROX_SD_DOWNSTREAM) < 0.02,
+      f"log(upper/point) {_lr:.3f} vs 1.645 x {U.APPROX_SD_DOWNSTREAM} = {1.645 * U.APPROX_SD_DOWNSTREAM:.3f}")
+
 # C-006 Erlang A exact identities.
 ea, ec = M.erlang_a(10.0, 4.0, 3, 1e-9), M.mmc(10.0, 4.0, 3)
 check("Erlang A with theta -> 0 equals Erlang C (C-006)",
