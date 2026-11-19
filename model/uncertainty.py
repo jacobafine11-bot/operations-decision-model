@@ -39,6 +39,15 @@ except ImportError:  # pragma: no cover
     from guardrails import ModelError  # type: ignore
 
 
+# C-012: the formula's own approximation error, as the spread of
+# log(predicted / true) station waits with TRUE inputs, measured ONLY on the
+# benchmark's development companies (analysis/approx_error.py,
+# results/approx_error.json: 60 companies, 147 stations). Mean error was
+# about 0 (unbiased); these are the spreads.
+APPROX_SD_FIRST = 0.055        # first station: random outside arrivals
+APPROX_SD_DOWNSTREAM = 0.115   # later stations: line-variability approximation too
+
+
 @dataclass(frozen=True)
 class Interval:
     point: float
@@ -55,10 +64,13 @@ class OperationIntervals:
 
 
 def intervals(op: M.Operation, n_jobs: list[int], n_arrivals: int, level: float = 0.90,
-              draws: int = 600, seed: int = 0) -> OperationIntervals:
+              draws: int = 600, seed: int = 0, include_approx: bool = True) -> OperationIntervals:
     """op: the operation built from ESTIMATED inputs.
     n_jobs: jobs observed per station (sample size behind each work speed).
-    n_arrivals: arrivals observed (sample size behind the arrival rate)."""
+    n_arrivals: arrivals observed (sample size behind the arrival rate).
+    include_approx: also include the formula's approximation error (C-012).
+    For networks that are not a single line, every station uses the larger
+    downstream spread (conservative)."""
     if len(n_jobs) != len(op.stations):
         raise ModelError("need one job count per station")
     if n_arrivals < 2 or min(n_jobs) < 2:
@@ -70,6 +82,9 @@ def intervals(op: M.Operation, n_jobs: list[int], n_arrivals: int, level: float 
     totals = np.empty(draws)
     unstable = np.zeros(draws, dtype=bool)
     lam_rel = 1.0 / math.sqrt(n_arrivals)
+    serial = M.is_serial_line(op)
+    approx_sd = np.array([(APPROX_SD_FIRST if (serial and j == 0) else APPROX_SD_DOWNSTREAM)
+                          if include_approx else 0.0 for j in range(k)])
     for d in range(draws):
         f_lam = max(1.0 + rng.normal() * lam_rel, 1e-6)
         sts = []
@@ -80,8 +95,10 @@ def intervals(op: M.Operation, n_jobs: list[int], n_arrivals: int, level: float 
                                 external_arrivals=tuple(g * f_lam for g in op.external_arrivals))
         try:
             b = M.evaluate(trial)
-            waits[d] = [r.Wq for r in b.station_results]
-            totals[d] = sum(r.W for r in b.station_results)
+            noise = np.exp(rng.normal(size=k) * approx_sd)
+            wq = np.array([r.Wq for r in b.station_results]) * noise
+            waits[d] = wq
+            totals[d] = float(wq.sum() + sum(r.W - r.Wq for r in b.station_results))
         except ModelError:
             waits[d] = np.inf
             totals[d] = np.inf

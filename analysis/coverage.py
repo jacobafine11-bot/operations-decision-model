@@ -18,6 +18,11 @@ Pass rules (all bands pooled; also reported per band):
   C2  Total time through the line: same, between 82% and 97%.
   C3  Near-capacity stations (true utilization ≥ 0.88, true wait
       ≥ 0.1 min): coverage ≥ 75%.
+ROUND 2 (changelog C-012), pre-registered and committed before its first
+run: identical rules, applied to 80 FRESH companies (indices 60 to 79),
+with ranges that also include the formula's approximation error measured
+only on development companies. Run:  python analysis/coverage.py 2
+
 Why a band, not exactly 90%: the truth has its own small simulation
 noise, and the ranges ignore the formula's approximation error by design
 (C-011); 82% to 97% is wide enough for those and narrow enough to catch
@@ -45,7 +50,11 @@ from estimate import estimate_stations  # noqa: E402
 from eventlog import generate_orders, line_times  # noqa: E402
 from guardrails import ModelError  # noqa: E402
 
-IDX = range(40, 60)
+# Round 1 (C-011, estimation error only): indices 40-59 -> results/coverage.json
+# Round 2 (C-012, plus approximation error): FRESH indices 60-79 -> results/coverage2.json
+ROUNDS = {"1": (range(40, 60), "coverage.json", False), "2": (range(60, 80), "coverage2.json", True)}
+ROUND = sys.argv[1] if len(sys.argv) > 1 else "1"
+IDX, OUTFILE, INCLUDE_APPROX = ROUNDS[ROUND]
 
 
 def one(args):
@@ -68,7 +77,8 @@ def one(args):
     out = {"band": band, "idx": idx, "variant": variant, "stations": []}
     try:
         iv = U.intervals(op, [est[s.name].n_orders for s in co.stations],
-                         est[co.stations[0].name].n_orders, seed=idx)
+                         est[co.stations[0].name].n_orders, seed=idx,
+                         include_approx=INCLUDE_APPROX)
     except ModelError as e:
         out["refused"] = str(e)
         return out
@@ -83,7 +93,7 @@ def one(args):
 
 
 def main() -> int:
-    if (ROOT / "results" / "coverage.json").exists():
+    if (ROOT / "results" / OUTFILE).exists():
         print("Refusing: the coverage test has already been run once; its result stands.")
         return 2
     jobs = [(b, i, v) for v in ("orig", "hard") for b in BANDS for i in IDX]
@@ -105,7 +115,7 @@ def main() -> int:
                "C3": pooled["c3"] >= 0.75}
     res = {"pooled": pooled, "by_band": by_band, "verdict": verdict,
            "refused": sum("refused" in r for r in rows), "rows": rows}
-    (ROOT / "results" / "coverage.json").write_text(json.dumps(res, indent=1, default=float))
+    (ROOT / "results" / OUTFILE).write_text(json.dumps(res, indent=1, default=float))
     print(f"C1 station waits:      {pooled['c1']:.1%} of {pooled['c1_n']} ranges contain the truth "
           f"(need 82%-97%) {'PASS' if verdict['C1'] else 'FAIL'}")
     print(f"C2 total time:         {pooled['c2']:.1%} of {pooled['c2_n']} (need 82%-97%) "
