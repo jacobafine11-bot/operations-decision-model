@@ -39,16 +39,12 @@ def _work_times(rng, mu: float, cv: float, n: int) -> np.ndarray:
     return rng.gamma(shape, 1.0 / (mu * shape), n)
 
 
-def generate_orders(lam: float, stations: list[StationTruth], n_orders: int,
-                    seed: int = 1, start: str = "2026-09-01 06:00:00"
-                    ) -> pd.DataFrame:
-    """Return one row per (order, station) with arrived/started/finished
-    timestamps, millisecond precision (see CHANGELOG C-002)."""
+def line_core(lam: float, stations: list[StationTruth], n_orders: int, seed: int):
+    """The simulation itself, in hours. Returns a list with one
+    (arrive, begin, finish) triple of arrays per station."""
     rng = np.random.default_rng(seed)
-    t_arr = np.cumsum(rng.exponential(1.0 / lam, n_orders))  # hours
-    base = pd.Timestamp(start)
-    frames = []
-    arrive = t_arr.copy()
+    arrive = np.cumsum(rng.exponential(1.0 / lam, n_orders))
+    out = []
     for st in stations:
         order = np.argsort(arrive, kind="stable")
         work = _work_times(rng, st.service_rate, st.cv, n_orders)
@@ -62,15 +58,33 @@ def generate_orders(lam: float, stations: list[StationTruth], n_orders: int,
             begin[i] = s
             finish[i] = s + work[i]
             heapq.heappush(free, finish[i])
-        to_ts = lambda h: base + pd.to_timedelta(np.round(h * 3.6e6), unit="ms")  # noqa: E731
-        frames.append(pd.DataFrame({
-            "order_id": [f"SO-{i:06d}" for i in range(n_orders)],
-            "station": st.name,
-            "arrived_at": to_ts(arrive),
-            "started_at": to_ts(begin),
-            "finished_at": to_ts(finish),
-        }))
+        out.append((arrive, begin, finish))
         arrive = finish
+    return out
+
+
+def line_times(lam: float, stations: list[StationTruth], n_orders: int, seed: int,
+               warmup_frac: float = 0.1):
+    """Fast path for benchmarks: mean wait per station and mean total time
+    through the line (hours), after the warmup, by order of arrival."""
+    core = line_core(lam, stations, n_orders, seed)
+    w0 = int(n_orders * warmup_frac)
+    waits = [float((b - a)[w0:].mean()) for a, b, _ in core]
+    total = float((core[-1][2] - core[0][0])[w0:].mean())
+    return waits, total
+
+
+def generate_orders(lam: float, stations: list[StationTruth], n_orders: int,
+                    seed: int = 1, start: str = "2026-09-01 06:00:00"
+                    ) -> pd.DataFrame:
+    """Return one row per (order, station) with arrived/started/finished
+    timestamps, millisecond precision (see CHANGELOG C-002)."""
+    base = pd.Timestamp(start)
+    to_ts = lambda h: base + pd.to_timedelta(np.round(h * 3.6e6), unit="ms")  # noqa: E731
+    ids = np.char.add("SO-", np.char.zfill(np.arange(n_orders).astype(str), 6))
+    frames = [pd.DataFrame({"order_id": ids, "station": st.name, "arrived_at": to_ts(a),
+                            "started_at": to_ts(b), "finished_at": to_ts(f)})
+              for st, (a, b, f) in zip(stations, line_core(lam, stations, n_orders, seed))]
     return pd.concat(frames, ignore_index=True)
 
 
