@@ -76,6 +76,46 @@ check the thing that matters, whether acting on the model's advice is
 nearly as good as knowing the truth. The $2,000/yr floor in D1 and D3
 keeps simulation noise on near-tied plans from counting as a model error.
 
+## Amendment 1 (2026-11-19), committed before either sealed set was run
+
+**What the development set showed about the TEST (not the model).**
+1. The decisions were too predictable. In all 40 development companies
+   the best plan contained a cheap process change at the bottleneck;
+   "do nothing" and "hire" never won. A rule of thumb ("fix the
+   bottleneck cheaply") would have scored well, so D1 to D4 could not
+   distinguish a good model from a lucky heuristic.
+2. P3 is undefined in band L: no station had a true wait of 1 minute or
+   more (median 2.4 seconds), because large crews rarely make anyone wait.
+
+**Changes.**
+- The original sealed set (companies 20 to 39 per band, original
+  generator) is run unchanged, exactly as pre-registered above.
+- A second sealed set, **"hard decisions"** (companies 20 to 39 per band,
+  generator variant `hard`), is added and scored with the same P1 to D4
+  thresholds. The variant widens the ranges so that every kind of answer
+  can win: waiting cost $0.50 to $40 per order-hour (log-uniform);
+  process change +2% to +25% speed at $2,000 to $60,000 × size
+  (log-uniform); automation +20% to +100% at $20,000 to $400,000 × size
+  (log-uniform); loaded wage $15 to $38; bottleneck utilization 0.75 to
+  0.95; other stations 0.30 to 0.92. Before its sealed run, 10 hard
+  development companies per band (0 to 9) are run only to confirm the
+  variant produces a real mix of right answers (do nothing, hiring, and
+  automation each winning somewhere); the model may not be changed on
+  the basis of them.
+- P3 when no station qualifies: reported as "not applicable" and counted
+  as neither pass nor fail. For information only (not gated), P3b
+  reports the same median error for stations with true wait ≥ 0.1 minute.
+- An extra diagnostic is reported, not gated: how often the model picks
+  the exact best plan, the number of close calls (runner-up within 10%
+  of the best), and how often a fixed rule of thumb ("process change at
+  the bottleneck, alone", the most common best plan in the development
+  set) would have been near-best. This shows whether the
+  decision tests can tell skill from luck.
+
+**Model status.** No model change was needed on the development set
+(band S: 7/7; band L: 6/6 defined criteria). The model is frozen at the
+commit containing this amendment.
+
 ## Rules for the development set
 
 Fixes are allowed only with a mechanism, a changelog entry, and the

@@ -39,7 +39,9 @@ from guardrails import ModelError  # noqa: E402
 from schema import validate_orders  # noqa: E402
 
 BANDS = {"S": (2, 100, 2, 6), "L": (100, 250, 3, 7)}
-SETS = {"dev": range(0, 20), "sealed": range(20, 40)}
+SETS = {"dev": ("orig", range(0, 20)), "sealed": ("orig", range(20, 40)),
+        "hard_dev": ("hard", range(0, 10)), "hard_sealed": ("hard", range(20, 40))}
+HEURISTIC = "Process change at bottleneck"   # rule-of-thumb baseline (Amendment 1)
 N_HISTORY, N_TRUTH, N_PLAN, REPS = 30_000, 100_000, 20_000, 4
 RESULTS = ROOT / "results"
 
@@ -77,37 +79,47 @@ class Company:
         return sum(s.workers for s in self.stations)
 
 
-def make_company(band: str, idx: int) -> Company:
+def make_company(band: str, idx: int, variant: str = "orig") -> Company:
+    """variant 'orig': the generator as first pre-registered.
+    variant 'hard': Amendment 1, wider ranges so every kind of answer can win."""
+    hard = variant == "hard"
     lo, hi, kmin, kmax = BANDS[band]
-    seed = (1_000_000 if band == "L" else 0) + 7919 * (idx + 1)
+    seed = (1_000_000 if band == "L" else 0) + 7919 * (idx + 1) + (500_000 if hard else 0)
     rng = np.random.default_rng(seed)
+    logu = lambda a, b: float(np.exp(rng.uniform(np.log(a), np.log(b))))  # noqa: E731
     W = int(rng.integers(lo, hi + 1))
     k = min(int(rng.integers(kmin, kmax + 1)), W)
     workers = 1 + rng.multinomial(W - k, rng.dirichlet(np.ones(k)))
     b = int(rng.integers(k))
-    rho = rng.uniform(0.50, 0.90, k)
-    rho[b] = rng.uniform(0.80, 0.93)
+    rho = rng.uniform(0.30, 0.92, k) if hard else rng.uniform(0.50, 0.90, k)
+    rho[b] = rng.uniform(0.75, 0.95) if hard else rng.uniform(0.80, 0.93)
     lam = W * rng.uniform(1.5, 4.0)
     cv = rng.uniform(0.3, 1.5, k)
     stations = tuple(StationTruth(f"S{j + 1}", lam / (workers[j] * rho[j]), int(workers[j]), float(cv[j]))
                      for j in range(k))
-    cw, wage = rng.uniform(2, 15), rng.uniform(22, 38)
+    if hard:
+        cw, wage = logu(0.5, 40.0), rng.uniform(15, 38)
+    else:
+        cw, wage = rng.uniform(2, 15), rng.uniform(22, 38)
     hours = float(rng.choice([2000.0, 4000.0, 6000.0]))
     scale = W / 20.0
     others = [j for j in range(k) if j != b]
     second = max(others, key=lambda j: rho[j]) if others else b
     hire_b = max(1, round(0.1 * workers[b]))
-    auto_install = rng.uniform(40_000, 250_000) * scale
+    auto_install = (logu(20_000, 400_000) if hard else rng.uniform(40_000, 250_000)) * scale
     c4 = (Cand("Speed up second station", second, "speed", rng.uniform(1.1, 1.4),
                rng.uniform(3_000, 30_000) * scale, 0.0, 5.0)
           if rng.random() < 0.5 else
           Cand("Hire at second station", second, "hire", max(1, round(0.1 * workers[second])),
                0.0, max(1, round(0.1 * workers[second])) * wage * hours, 1.0))
+    proc = (Cand("Process change at bottleneck", b, "speed", rng.uniform(1.02, 1.25),
+                 logu(2_000, 60_000) * scale, 0.0, 5.0) if hard else
+            Cand("Process change at bottleneck", b, "speed", rng.uniform(1.1, 1.3),
+                 rng.uniform(2_000, 15_000) * scale, 0.0, 5.0))
+    auto_speed = rng.uniform(1.2, 2.0) if hard else rng.uniform(1.4, 1.9)
     cands = (
-        Cand("Process change at bottleneck", b, "speed", rng.uniform(1.1, 1.3),
-             rng.uniform(2_000, 15_000) * scale, 0.0, 5.0),
-        Cand("Automate bottleneck", b, "speed", rng.uniform(1.4, 1.9),
-             auto_install, 0.05 * auto_install, 7.0),
+        proc,
+        Cand("Automate bottleneck", b, "speed", auto_speed, auto_install, 0.05 * auto_install, 7.0),
         Cand("Hire at bottleneck", b, "hire", hire_b, 0.0, hire_b * wage * hours, 1.0),
         c4,
     )
@@ -228,12 +240,31 @@ def score(rows: list[dict], band: str) -> dict:
     med = lambda x: float(np.median(np.abs(x))) if len(x) else float("nan")  # noqa: E731
     share = lambda x: float(np.mean(x)) if len(x) else float("nan")  # noqa: E731
     n = len(rs)
+    st_err_b = [pw / tw - 1 for r in ok for pw, tw in zip(r["pred_waits_h"], r["true_waits_h"]) if tw * 60 >= 0.1]
+    exact = sum(r["pick"] == r["best_true"] for r in ok)
+    close = 0
+    heur_near = 0
+    for r in ok:
+        v = sorted(r["plans_true"].values(), reverse=True)
+        close += len(v) > 1 and v[0] > 0 and (v[0] - v[1]) / v[0] < 0.10
+        hv = r["plans_true"].get(HEURISTIC, 0.0)
+        heur_near += (r["best_true_value"] - hv) <= max(0.10 * max(r["best_true_value"], 0.0), 2_000.0)
+    from collections import Counter
+    diag = {"exact_best": exact, "close_calls": int(close), "heuristic_near_best": int(heur_near),
+            "evaluated": len(ok), "p3b_stations": len(st_err_b), "p3b_median_abs_err": med(st_err_b),
+            "p3_stations": len(st_err),
+            "best_plan_mix": dict(Counter(r["best_true"] for r in ok)),
+            "best_has_hire": sum("Hire" in r["best_true"] for r in ok),
+            "best_has_automation": sum("Automate" in r["best_true"] for r in ok),
+            "best_is_nothing": sum(r["best_true"] == "Do nothing" for r in ok)}
+    p3 = med(st_err)
     card = [
         ("P1", "Median abs error, total time through the line", med(tot_err), "≤ 10%", med(tot_err) <= 0.10),
         ("P2", "Companies with total-time error within ±20%",
          share([abs(e) <= 0.20 for e in tot_err]) * len(ok) / max(n, 1), "≥ 90%",
          share([abs(e) <= 0.20 for e in tot_err]) * len(ok) / max(n, 1) >= 0.90),
-        ("P3", "Median abs error, station waits (true wait ≥ 1 min)", med(st_err), "≤ 15%", med(st_err) <= 0.15),
+        ("P3", "Median abs error, station waits (true wait ≥ 1 min)", p3, "≤ 15%",
+         None if not st_err else p3 <= 0.15),
         ("D1", "Companies where the model's plan is near-best", share(near) * len(ok) / max(n, 1), "≥ 80%",
          share(near) * len(ok) / max(n, 1) >= 0.80),
         ("D2", "Median regret, share of the best plan's value", float(np.median(regret_rel)) if regret_rel else float("nan"),
@@ -243,9 +274,9 @@ def score(rows: list[dict], band: str) -> dict:
         ("D4", "Median abs error, promised vs delivered savings", med(prom_err), "≤ 15%", med(prom_err) <= 0.15),
     ]
     return {"band": band, "companies": n, "refused": n - len(ok),
-            "card": [{"id": c[0], "criterion": c[1], "value": c[2], "pass_if": c[3], "pass": bool(c[4])}
-                     for c in card],
-            "total_time_errors": tot_err, "station_wait_errors": st_err}
+            "card": [{"id": c[0], "criterion": c[1], "value": c[2], "pass_if": c[3],
+                      "pass": None if c[4] is None else bool(c[4])} for c in card],
+            "diagnostics": diag, "total_time_errors": tot_err, "station_wait_errors": st_err}
 
 
 def _run(args):
@@ -253,12 +284,16 @@ def _run(args):
 
 
 def run_set(which: str) -> int:
-    if which == "sealed":
+    if which in ("sealed", "hard_sealed"):
         frz = RESULTS / "benchmark_frozen.json"
         if not frz.exists():
             print("Refusing: no freeze record. Run `benchmark.py freeze` and commit first.")
             return 2
-    jobs = [(b, i) for b in BANDS for i in SETS[which]]
+        if (RESULTS / f"benchmark_{which}.json").exists():
+            print(f"Refusing: {which} has already been run once; its result stands.")
+            return 2
+    variant, idxs = SETS[which]
+    jobs = [(b, i, variant) for b in BANDS for i in idxs]
     t0 = time.time()
     with Pool(2) as pool:
         rows = []
@@ -276,11 +311,18 @@ def run_set(which: str) -> int:
          "code_revision": rev, "seconds": round(time.time() - t0), "rows": rows, "scores": scores},
         indent=1, default=float))
     for b, s in scores.items():
+        defined = [c for c in s["card"] if c["pass"] is not None]
         print(f"\nBand {b} ({which}, {s['companies']} companies, {s['refused']} refused): "
-              f"{sum(c['pass'] for c in s['card'])}/{len(s['card'])} criteria")
+              f"{sum(c['pass'] for c in defined)}/{len(defined)} defined criteria")
         for c in s["card"]:
             v = c["value"]
-            print(f"  {c['id']} {'PASS' if c['pass'] else 'FAIL'}  {c['criterion']}: {v:.1%} (need {c['pass_if']})")
+            verdict = "N/A " if c["pass"] is None else ("PASS" if c["pass"] else "FAIL")
+            print(f"  {c['id']} {verdict}  {c['criterion']}: {v:.1%} (need {c['pass_if']})")
+        dg = s["diagnostics"]
+        print(f"  diagnostics: exact best {dg['exact_best']}/{dg['evaluated']}, close calls {dg['close_calls']}, "
+              f"rule-of-thumb near-best {dg['heuristic_near_best']}/{dg['evaluated']}; best plan had hiring "
+              f"{dg['best_has_hire']}x, automation {dg['best_has_automation']}x, do-nothing {dg['best_is_nothing']}x; "
+              f"P3b {dg['p3b_median_abs_err']:.1%} over {dg['p3b_stations']} stations")
     print(f"\n{which}: {len(rows)} companies in {time.time() - t0:.0f}s")
     return 0
 
