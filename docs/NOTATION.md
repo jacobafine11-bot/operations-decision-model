@@ -53,12 +53,22 @@ enforces this.
 | V(S) | value: T(Π_after − Π_before) − I(S); do S iff V > 0 and sign survives sensitivity | $/yr | derived (D9), tested |
 | 𝓘_ab | interaction V({a,b}) − V({a}) − V({b}) | $/yr | derived (D9), tested |
 
+## Uncertainty (C-011, C-012)
+
+| Symbol | Meaning | Units | Provenance |
+|---|---|---|---|
+| n | observations behind an estimate (orders, jobs) | count | data |
+| SE(λ)/λ | relative sampling error of an arrival rate, 1/√n | — | derived (Poisson count) |
+| SE(m)/m | relative sampling error of a mean work time, cv/√n | — | derived (standard error of a mean) |
+| σ_first, σ_down | spread of the formula's log error at first / later stations: 0.055 / 0.115 | — | measured on development companies only |
+| 90% range | 5th to 95th percentile of the model re-run over those errors | as the output | method |
+
 ## Standing assumptions (each one is tested or swept)
 
-1. Poisson external arrivals (tested: it held in D1's data checks; re-test per dataset).
+1. Poisson external arrivals within a period. Re-test per dataset: it FAILED for a real wave-based warehouse (C-013), where work is released in batches.
 2. Service times exponential unless measured cv says otherwise, then Kingman-corrected (C-001).
 3. FIFO discipline, infinite buffers.
 4. Open network: all work eventually leaves (guardrail rejects trapping routing).
 5. Steady state: every station ρ < 1 (guardrail; unstable inputs raise, never return numbers).
-6. Demand per cycle approximately normal; lumpy/intermittent SKUs go to the D6 treatment instead.
+6. Demand per cycle approximately normal; lumpy/intermittent SKUs go to the D6 treatment instead. Real warehouse demand was right-skewed (median skewness 1.43), which made the rule overstock at an 80% target (C-013).
 7. Cost inputs are the weakest layer: every assumed or interviewed cost gets a sensitivity sweep and the report states the flip points.

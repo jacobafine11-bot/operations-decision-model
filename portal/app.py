@@ -30,6 +30,7 @@ pages = {
     "How we know it works": [
         st.Page("views/sim_lab.py", title="Simulation lab", icon=":material/science:"),
         st.Page("views/stats_lab.py", title="Statistics lab", icon=":material/functions:"),
+        st.Page("views/benchmark.py", title="Benchmark (160 companies)", icon=":material/leaderboard:"),
         st.Page("views/journal.py", title="Fine-tuning journal", icon=":material/history_edu:"),
         st.Page("views/real_data.py", title="Real-data test", icon=":material/fact_check:"),
         st.Page("views/verification.py", title="Verification suite", icon=":material/verified:"),

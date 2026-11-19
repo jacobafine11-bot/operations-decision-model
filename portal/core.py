@@ -42,6 +42,8 @@ def secs(hours: float) -> str:
 
 
 def money(x: float) -> str:
+    if x != x:  # NaN
+        return "n/a"
     return f"-${abs(x):,.0f}" if x < 0 else f"${x:,.0f}"
 
 

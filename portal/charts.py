@@ -147,14 +147,15 @@ def finish(chart, height: int = 300):
 
 
 def pred_vs_obs(df: pd.DataFrame, x: str, y: str, x_title: str, y_title: str,
-                tooltip_extra: list | None = None) -> alt.Chart:
+                tooltip_extra: list | None = None, color: str = REAL,
+                band: float = 1.5) -> alt.Chart:
     """Real observed (x) vs model predicted (y), log-log, with the y = x
     line and the ±50% band that the S2 criterion uses."""
     d = df[(df[x] > 0) & (df[y] > 0)]
     lo = float(min(d[x].min(), d[y].min()))
     hi = float(max(d[x].max(), d[y].max()))
     ref = pd.DataFrame({"v": np.geomspace(lo, hi, 50)})
-    ref["lo"], ref["hi"] = ref["v"] / 1.5, ref["v"] * 1.5
+    ref["lo"], ref["hi"] = ref["v"] / band, ref["v"] * band
     tt = [alt.Tooltip(f"{x}:Q", format=".3g", title=x_title),
           alt.Tooltip(f"{y}:Q", format=".3g", title=y_title)] + (tooltip_extra or [])
     sc = alt.Scale(type="log", domain=[lo, hi])
@@ -163,6 +164,6 @@ def pred_vs_obs(df: pd.DataFrame, x: str, y: str, x_title: str, y_title: str,
             x=alt.X("v:Q", scale=sc), y=alt.Y("lo:Q", scale=sc), y2="hi:Q")
         + alt.Chart(ref).mark_line(color=INK2, strokeDash=[4, 3], strokeWidth=1.5).encode(
             x=alt.X("v:Q", scale=sc), y=alt.Y("v:Q", scale=sc))
-        + alt.Chart(d).mark_circle(color=REAL, size=40, opacity=0.55).encode(
+        + alt.Chart(d).mark_circle(color=color, size=40, opacity=0.55).encode(
             x=alt.X(f"{x}:Q", title=x_title, scale=sc),
             y=alt.Y(f"{y}:Q", title=y_title, scale=sc), tooltip=tt), 360)

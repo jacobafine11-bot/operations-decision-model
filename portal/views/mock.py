@@ -68,8 +68,20 @@ try:
 except core.ModelError as e:
     st.error(f"The model stopped instead of guessing: {e}")
     st.stop()
+import uncertainty as U  # noqa: E402
+iv = U.intervals(op, [int(x) for x in est["Orders seen"]], int(est["Orders seen"].iloc[0]))
+mv.insert(3, "Wait 90% range (min)", [f"{w.lo * 60:.1f} to {w.hi * 60:.1f}" if w.hi != float("inf")
+                                      else f"{w.lo * 60:.1f} to unbounded" for w in iv.waits])
+mv["History inside range"] = [("yes" if w.lo * 60 <= h <= w.hi * 60 else "no")
+                              for w, h in zip(iv.waits, mv["Wait, history (min)"])]
 st.dataframe(mv.style.format({"Utilization (model)": "{:.0%}", "Wait error": "{:+.0%}"},
                              precision=2), width="stretch", hide_index=True)
+st.caption("The 90% range reflects how much data the estimates came from and the formula's own "
+           "approximation error (changelog C-011, C-012). On 80 fresh test companies, ranges like "
+           "these contained the truth 89% of the time.")
+if iv.sensitive:
+    st.warning(f"**Sensitive:** {', '.join(iv.sensitive)}. The range is wider than ±25% of the "
+               "prediction; collect more history before relying on these numbers.")
 long = pd.concat([
     mv[["Station", "Wait, model (min)"]].rename(columns={"Wait, model (min)": "minutes"}).assign(Series="Model"),
     mv[["Station", "Wait, history (min)"]].rename(columns={"Wait, history (min)": "minutes"}).assign(Series="Simulation"),

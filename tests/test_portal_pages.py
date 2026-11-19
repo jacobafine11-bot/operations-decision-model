@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "portal"))
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 PAGES = ["views/home.py", "views/workbench.py", "views/mock.py", "views/sim_lab.py",
-         "views/stats_lab.py", "views/journal.py", "views/real_data.py",
+         "views/stats_lab.py", "views/benchmark.py", "views/journal.py", "views/real_data.py",
          "views/verification.py", "views/pipeline.py", "views/docs.py"]
 
 

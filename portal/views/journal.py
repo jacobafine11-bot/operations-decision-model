@@ -35,10 +35,14 @@ summary = pd.DataFrame([
     ("C-007", "Headcount is not capacity (real data)", "Finding"),
     ("C-008", "First real-data blind test failed", "Recorded, diagnosed"),
     ("C-009", "Variability passed down a line of stations", "Model changed, held-out pass"),
+    ("C-010", "160-company benchmark", "Sealed: 27 of 28 criteria"),
+    ("C-011", "Uncertainty ranges for every prediction", "Added; coverage 2 of 3"),
+    ("C-012", "Ranges include the formula's own error", "Fixed; coverage 3 of 3"),
+    ("C-013", "Real warehouse and factory data", "3 of 5; new limits found"),
 ], columns=["Entry", "What happened", "Status"])
 st.dataframe(summary, hide_index=True, width="stretch")
 
-pick = st.selectbox("Open an entry", list(summary["Entry"]), index=8,
+pick = st.selectbox("Open an entry", list(summary["Entry"]), index=len(summary) - 1,
                     format_func=lambda k: f"{k} · {summary.set_index('Entry').loc[k, 'What happened']}")
 st.divider()
 st.subheader(f"{pick} · {entries.get(pick, ('',))[0]}")
@@ -216,6 +220,76 @@ elif pick == "C-009":
     st.markdown(f"Average error **{q['mae_without']:.1%} → {q['mae_with']:.1%}**. Pre-registered rule: "
                 f"(a) smaller error with the correction: **{'PASS' if q['rule_a'] else 'FAIL'}**; "
                 f"(b) every station within ±25%: **{'PASS' if q['rule_b'] else 'FAIL'}**.")
+
+elif pick == "C-010":
+    st.markdown("**The benchmark in one picture:** how often the model's plan was the exact best, "
+                "against a rule of thumb, across all four sealed groups.")
+    st.page_link("views/benchmark.py", label="Open the full Benchmark page", icon=":material/leaderboard:")
+    hs = json.loads((core.RESULTS / "benchmark_hard_sealed.json").read_text())
+    s = hs["scores"]["L"]
+    st.markdown(f"**The one failure:** hard decisions, 100 to 250 workers, station waits "
+                f"{[c for c in s['card'] if c['id'] == 'P3'][0]['value']:.1%} vs ≤ 15%. Four stations at "
+                "88% to 95% busy: with the TRUE inputs the formula's error was 5.7%; with inputs "
+                "estimated from history, 23.8%. Near capacity, small measurement errors are amplified.")
+    rho = np.linspace(0.5, 0.97, 60)
+    amp = pd.DataFrame({"rho": rho})
+    amp["amp"] = (1 / (1 - (rho * 1.01).clip(max=0.999)) - 1 / (1 - rho)) / (1 / (1 - rho))
+    a50, a97 = float(amp["amp"].iloc[0]), float(amp["amp"].iloc[-1])
+    ch = alt.Chart(amp).mark_line(color=C.MODEL, strokeWidth=2).encode(
+        x=alt.X("rho:Q", axis=alt.Axis(format="%"), title="How busy the station is"),
+        y=alt.Y("amp:Q", axis=alt.Axis(format="%"), title="Wait error from a 1% speed error"),
+        tooltip=[alt.Tooltip("rho:Q", format=".0%"), alt.Tooltip("amp:Q", format=".1%")])
+    st.altair_chart(C.finish(ch, 240), width="stretch")
+    st.caption("The amplification comes from the 1/(1 − utilization) factor in every waiting-time "
+               f"formula: a 1% error in measured speed moves the predicted wait by about {a50:.0%} "
+               f"at 50% busy and about {a97:.0%} at 97% busy.")
+
+elif pick in ("C-011", "C-012"):
+    c1 = json.loads((core.RESULTS / "coverage.json").read_text())
+    c2 = json.loads((core.RESULTS / "coverage2.json").read_text())
+
+    def by_rho(d):
+        st_ = [s for r in d["rows"] for s in r.get("stations", []) if s["true"] * 60 >= 0.1]
+        out = []
+        for lo, hi, lab in ((0, .7, "under 70%"), (.7, .8, "70-80%"), (.8, .88, "80-88%"), (.88, 1, "88%+")):
+            g = [s["covered"] for s in st_ if lo <= s["rho"] < hi]
+            if g:
+                out.append({"Busy": lab, "Coverage": float(np.mean(g)), "n": len(g)})
+        return pd.DataFrame(out)
+
+    df = pd.concat([by_rho(c1).assign(Round="1 · estimation error only"),
+                    by_rho(c2).assign(Round="2 · plus formula error")])
+    st.markdown("**Coverage of 90% ranges by how busy the station is.** Round 1 failed at quiet "
+                "stations: tiny estimation error made ranges narrow, but the formula's own ~6% error "
+                "remained. Round 2 adds that error (measured only on development companies).")
+    band = pd.DataFrame({"y0": [0.82], "y1": [0.97]})
+    ch = (alt.Chart(band).mark_rect(color=C.BAND, opacity=0.5).encode(y="y0:Q", y2="y1:Q")
+          + alt.Chart(df).mark_line(strokeWidth=2, point=alt.OverlayMarkDef(size=64)).encode(
+              x=alt.X("Busy:N", sort=["under 70%", "70-80%", "80-88%", "88%+"], title="How busy the station is"),
+              y=alt.Y("Coverage:Q", axis=alt.Axis(format="%"), scale=alt.Scale(domain=[0.3, 1]),
+                      title="Ranges containing the truth"),
+              color=alt.Color("Round:N", scale=alt.Scale(range=[C.INK2, C.MODEL]), legend=alt.Legend(title=None)),
+              strokeDash=alt.StrokeDash("Round:N", scale=alt.Scale(range=[[6, 3], [1, 0]]), legend=None),
+              tooltip=["Round:N", "Busy:N", alt.Tooltip("Coverage:Q", format=".0%"), "n:Q"]))
+    st.altair_chart(C.finish(ch, 260), width="stretch")
+    st.caption("Gray band: the pass zone, 82% to 97%. Each round ran once on its own 80 fresh companies.")
+
+elif pick == "C-013":
+    o = pd.read_csv(core.ROOT / "data" / "public" / "warehouse_orders.csv", parse_dates=["created_at"])
+    per = o.groupby("created_at").size().rename("orders").reset_index()
+    st.markdown("**Real warehouse orders arrive in waves, not one at a time.** Each bar is one "
+                "minute in which orders were created; 32,634 orders fell into only "
+                f"{len(per):,} distinct minutes.")
+    ch = alt.Chart(per).mark_bar(color=C.REAL).encode(
+        x=alt.X("orders:Q", bin=alt.Bin(maxbins=40), title="Orders created in the same minute"),
+        y=alt.Y("count():Q", title="Minutes", scale=alt.Scale(type="symlog")),
+        tooltip=["count():Q"])
+    st.altair_chart(C.finish(ch, 240), width="stretch")
+    st.markdown("Random arrivals would almost never put more than a handful of orders in one "
+                "minute. Batches of dozens or hundreds mean the warehouse releases work in waves, "
+                "so the model's random-arrival assumption fails here. Next model change: batch "
+                "arrivals, tested on fresh data.")
+    st.page_link("views/real_data.py", label="Full round 2 results", icon=":material/fact_check:")
 
 with st.expander("Full changelog entry", expanded=False):
     st.markdown(entries.get(pick, ("", "*Entry not found*"))[1])

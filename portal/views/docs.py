@@ -14,6 +14,9 @@ DOCS = {
     "Verification report": ("docs/VERIFICATION_REPORT.md", "Generated: every check with its result"),
     "Pre-registration (bank test)": ("docs/PREREGISTRATION_BANK.md", "Rules written before results"),
     "Real-data report": ("docs/REAL_DATA_VALIDATION.md", "Generated: the blind test results"),
+    "Pre-registration (benchmark)": ("docs/PREREGISTRATION_BENCHMARK.md", "160 companies: rules and both amendments"),
+    "Pre-registration (round 2)": ("docs/PREREGISTRATION_REAL2.md", "Warehouse and factory: rules first"),
+    "Round 2 report": ("docs/REAL2_REPORT.md", "Real warehouse and factory results"),
     "Public data sources": ("data/public/README.md", "Datasets included and not included"),
     "Commit history": ("docs/GIT_HISTORY.txt", "Plain-text copy of the git log"),
 }

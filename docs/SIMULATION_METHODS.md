@@ -20,6 +20,18 @@ arithmetic, agreement would be circular.
 | `eventlog.generate_orders` | an order-by-order history for a line of crews | FIFO crews in series with gamma work times; arrivals at each station re-sorted before assignment; millisecond timestamps. Plays a company's system export in the mock walkthrough and the C-009 held-out check. |
 | `pipeline/scale_test.py` | a synthetic year of history | 5M order events with known ground-truth rates at millisecond timestamps, plus 250 SKUs × 365 days of gamma demand; exists to prove the data pipeline recovers known truth at full scale. |
 
+## 1b. Benchmark and coverage simulations
+
+| Purpose | How | Size |
+|---|---|---|
+| A company's history (what the model sees) | `generate_orders` on the true operation, millisecond timestamps, then the validation gate and DuckDB estimation | 30,000 orders |
+| True waits and time through the line | `line_times` on the true operation, 4 independent runs averaged (Amendment 2), standard error recorded | 4 × 200,000 orders |
+| True value of every plan | the true operation before and after the plan, same seeds per replication (common random numbers), gross savings = waiting cost × arrival rate × drop in mean time × hours per year | 4 × 20,000 orders per plan |
+| Uncertainty ranges | 600 Monte Carlo draws of the estimates' sampling error (and, since C-012, the formula's measured approximation error), model re-run on each | per prediction |
+
+Seeds are fixed by company number, so every company can be regenerated exactly
+(`analysis/benchmark.py`, `make_company`).
+
 ## 2. Randomness and reproducibility
 
 - Every simulator takes a **seed** (numpy PCG64). Every number in the

@@ -34,7 +34,7 @@ Decision rule: do a change set S iff V(S) > 0 **and** the sign survives
 sensitivity sweeps on every assumed cost input (the sensitivity()
 function reports flip points: "A beats B unless waiting cost exceeds $X").
 
-## Verification (four layers, 84/84 passing)
+## Verification (four layers, 87/87 passing)
 
 0. The statistical tests themselves are validated: TOST against its
    independent CI formulation (400/400), its firing rate at the margin
@@ -63,6 +63,8 @@ pip install -r requirements.txt
 python3 tests/run_verification.py     # writes docs/VERIFICATION_REPORT.md
 python3 pipeline/scale_test.py        # 5M-row pipeline proof
 python3 tests/test_portal_logic.py    # portal compute layer
+python3 tests/test_portal_pages.py    # every portal page + buttons
+python3 analysis/benchmark.py dev     # benchmark (see docs/PREREGISTRATION_BENCHMARK.md)
 streamlit run portal/app.py           # the user-facing portal
 ```
 
@@ -71,7 +73,7 @@ streamlit run portal/app.py           # the user-facing portal
 - **Source of truth:** a private GitHub repository (this folder is a
   ready-to-push git repo). Version history, issues, and free deploys
   hang off it.
-- **Interface:** the portal, a full program (`portal/app.py`) with ten
+- **Interface:** the portal, a full program (`portal/app.py`) with eleven
   pages. See "The portal" below. Deployable free on Streamlit Community
   Cloud straight from this repository (main file `portal/app.py`).
 - **Notebooks:** `notebooks/colab_quickstart.ipynb` runs the full suite
@@ -93,27 +95,30 @@ Run it: `pip install -r requirements.txt` then `streamlit run portal/app.py`
 | Mock company walkthrough | Harbor Supply Co. (fictional, with a known answer key): order history, validation gate, estimates, predictions checked against the history, ranked decisions, and a re-simulation that checks whether the decision delivered |
 | Simulation lab | Run the independent simulator live (one station, customers who give up, a line of stations); watch it converge; TOST verdict; sample-size estimate |
 | Statistics lab | TOST step by step; why a plain t-test would pass a wrong model; chi-square and KS input checks on real Tyler's Grill data; the tests, tested |
+| Benchmark (160 companies) | Sealed scorecards for 2 to 100 and 100 to 250 workers, model vs a rule of thumb, predicted vs true, promised vs delivered savings, uncertainty coverage, a company explorer |
 | Fine-tuning journal | Every changelog entry with mechanism, evidence, and a live demonstration |
-| Real-data test | The pre-registered bank test: git timeline, scorecard recomputed live, charts, why it failed |
+| Real-data tests | Round 1 (call center) and round 2 (real warehouse inventory, real factory flow): pre-registered, run once, diagnosed |
 | Verification suite | Run all 84 checks from the page; run history; the full report |
 | Data pipeline | Upload an order CSV and run the gate and estimation; the standard format; scale proof |
 | Documents | Every document in the repository |
 
 Portal tests: `python tests/test_portal_pages.py` executes every page and
-clicks the buttons that run real work (12 checks).
+clicks the buttons that run real work (13 checks).
 
 ## Status (honest)
 
-| Layer | Against simulation | Against real data |
-|---|---|---|
-| Variability down a line of stations (C-009) | held-out check passed: error 24.3% → 5.9% | not yet |
-| Queueing equations (E1, E2, Erlang C, Erlang A) | exactly verified, 84/84 checks | first blind test **failed 1/6** (Anonymous Bank call center, 417k real calls): about 2x too pessimistic, because effective capacity is hard to measure from records (C-007, C-008) |
-| Inventory (E3) | verified | not yet tested on real data |
-| Decision layer (E5–E7) | behavior-tested | not yet tested on real data |
+| Part | Against simulation | 160 made-up companies (sealed) | Real data |
+|---|---|---|---|
+| Waiting lines (stations, crews, lines, give-ups) | exactly verified, 87/87 checks | time through the line: median error 0.4% to 1.3% | call center **failed 1/6** (effective capacity hard to measure) |
+| Uncertainty ranges (C-011, C-012) | exact limits checked | 90% ranges held 89% of the time | not yet |
+| Decisions (value of a change, best plan) | behavior tested | exact best plan **78/80**; rule of thumb near-best 31/80 | not yet |
+| Inventory (best stock level) | verified vs brute force | not in the benchmark | real warehouse: 90.6% at a 90% target, 92.9% at 95%, overstocks at 80% |
+| Flow and routing (E1) | exactly verified | part of every company | real factory: right bottleneck; workload test flawed by data cutoff |
 
-The model is not yet ready to be trusted for a real business decision.
-The verification machinery that told us so is. Round 2 is planned in
-CHANGELOG C-008.
+On operations that match its assumptions the model is accurate and its advice is
+nearly perfect from 2 to 250 workers. Real data has shown where the assumptions
+break, and those set the next work: **wave (batch) arrivals**, **skewed demand**,
+and **effective capacity vs headcount**.
 
 ## Real-data testing protocol
 
@@ -125,6 +130,13 @@ commit history shows the order.
 
 ## Findings so far (see docs/CHANGELOG.md)
 
+- **C-013** Real warehouse and factory (round 2): the inventory rule delivers 90.6% at a
+  90% target on real demand; the routing math names the real factory bottleneck. Real
+  orders arrive in waves, and demand is skewed: the next model changes.
+- **C-012 / C-011** Every prediction now has a 90% range covering estimation and the
+  formula's own error; on 80 fresh companies the ranges held 89% of the time.
+- **C-010** 160-company benchmark (2 to 250 workers): sealed 27 of 28 criteria; exact
+  best plan 78 of 80. Near capacity, small measurement errors are amplified.
 - **C-009** Variability passes down a line of stations (QNA linking
   equation). Found through the mock company; a pre-registered held-out
   check on four new configurations cut downstream error from 24.3% to 5.9%.

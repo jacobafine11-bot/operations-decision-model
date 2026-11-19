@@ -42,11 +42,24 @@ with tab_op:
                                    L.DEFAULTS["overhead"], 5.0)
         hours = st.number_input("Operating hours per year", 1.0, 8784.0,
                                 L.DEFAULTS["hours_per_year"], 50.0)
+        n_hist = st.number_input("Orders of history behind these numbers", 50, 10_000_000, 5_000, 500,
+                                 help="Sets how wide the 90% ranges are. A one-week stopwatch "
+                                      "sample might be a few hundred orders; a system export, tens "
+                                      "of thousands.")
     try:
         op = L.build_operation(stations_df, arrival, margin, waiting, overhead, hours)
         table, bottleneck = L.station_table(op)
+        import uncertainty as U
+        iv = U.intervals(op, [int(n_hist)] * len(op.stations), int(n_hist))
+        table.insert(table.columns.get_loc("Avg minutes in station"), "Wait 90% range (min)",
+                     [f"{w.lo * 60:.1f} to {w.hi * 60:.1f}" if w.hi != float("inf")
+                      else f"{w.lo * 60:.1f} to unbounded" for w in iv.waits])
         st.subheader("How the operation runs today")
         st.dataframe(table, width="stretch", hide_index=True)
+        if iv.sensitive:
+            st.warning(f"**Sensitive:** {', '.join(iv.sensitive)}. With {int(n_hist):,} orders of "
+                       "history the 90% range is wider than ±25% of the prediction. Busy stations "
+                       "amplify small measurement errors; collect more data before deciding.")
         st.info(f"**Bottleneck: {bottleneck}.** Improving any other station barely "
                 "moves the totals until this one is addressed.")
         st.caption("Arrival variability below 1 means a station receives work more "
