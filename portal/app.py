@@ -22,6 +22,7 @@ st.set_page_config(page_title="Operations Decision Model", page_icon="📦",
 pages = {
     "Start here": [
         st.Page("views/home.py", title="Overview", icon=":material/home:", default=True),
+        st.Page("views/is2.py", title="Independent Study 2", icon=":material/task_alt:"),
     ],
     "Use the model": [
         st.Page("views/workbench.py", title="Model workbench", icon=":material/tune:"),
